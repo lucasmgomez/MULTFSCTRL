@@ -39,6 +39,17 @@ def custom_seqinfo(wrapper, series_files):
     })
     return custom_info
 
+def _extract_pe_dir_from_text(protocol_name, series_description):
+    """Best-effort extract AP/PA direction from protocol/series description text."""
+    txt = f"{protocol_name or ''}_{series_description or ''}".upper()
+    # common tokens like "_AP", " AP ", "AP_" etc.
+    if re.search(r'(?<![A-Z])(AP)(?![A-Z])', txt):
+        return "AP"
+    if re.search(r'(?<![A-Z])(PA)(?![A-Z])', txt):
+        return "PA"
+    return None
+
+
 def infotoids(seqinfos, outdir):
     seqinfo = next(iter(seqinfos))
     patient_name = str(seqinfo.custom['patient_name'])
@@ -146,6 +157,13 @@ def get_seq_bids_info(s):
         seq["dir"] = pedir if pedir_pos else pedir[::-1]
     except Exception:
         pass
+
+    # If we still don't have a sensible AP/PA dir, attempt to extract it from
+    # protocol/series description (some scanners put AP/PA there).
+    if not seq.get("dir"):
+        txt_dir = _extract_pe_dir_from_text(s.protocol_name, s.series_description)
+        if txt_dir:
+            seq["dir"] = txt_dir
 
     # label non-brain if present
     bodypart = s.custom['body_part']
@@ -308,6 +326,14 @@ def infotodict(seqinfo):
 
         seq_type = bids_info["type"]
         seq_label = bids_info["label"]
+
+        # For fmap epi sequences, assign a per-direction run counter so
+        # templates include run-XX and dir-<AP/PA> (if available).
+        if seq_type == "fmap" and seq_label == "epi" and bids_info.get("part") in ["mag", None]:
+            pe_dir = bids_info.get("dir")
+            # Use None as key if unknown direction so different unknowns don't collide
+            fieldmap_runs[pe_dir] = fieldmap_runs.get(pe_dir, 0) + 1
+            bids_info["run"] = fieldmap_runs[pe_dir]
 
         # sbref→fmap duplication path (no desc used)
         if ((seq_type == "fmap" and seq_label == "epi") or

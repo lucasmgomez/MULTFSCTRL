@@ -7,7 +7,7 @@ import pandas as pd
 import pydicom
 
 # -------------------- Config --------------------
-FUNC_KEYWORDS = ("func", "task", "bold", "wm")
+FUNC_KEYWORDS = ("func", "task", "wm")
 LETTER_RE = re.compile(r"(?:[_\-]wm[_\-]?|task[_\-]wm[_\-]?)([ABC])\b", re.IGNORECASE)
 
 BLOCK_RE = re.compile(r"(?i)(^|[_-])block[_-]?(\d+)(?=$|[^A-Za-z0-9])")
@@ -108,8 +108,8 @@ def main():
                 help="Copy non-functional DICOMs unchanged into mapped/.")
     ap.add_argument("--dry_run", action="store_true", help="Preview without writing DICOMs.")
     ap.add_argument("--strict", action="store_true", help="Exit non-zero if validation fails.")
-    ap.add_argument("--patient_study_prefix", default="multifs_pilot",
-                    help="Prefix for PatientName, e.g. 'multifs_pilot'")
+    ap.add_argument("--patient_study_prefix", default="multfs_pilot",
+                    help="Prefix for PatientName, e.g. 'multfs_pilot'")
     ap.add_argument("--patient_sub", required=True,
                     help="Subject label (e.g., '01' or 'sub_01'—numbers will be zero-padded to 2 by default)")
     ap.add_argument("--patient_ses", required=True,

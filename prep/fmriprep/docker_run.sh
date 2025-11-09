@@ -1,17 +1,16 @@
 docker run -ti --rm \
-    -v /mnt/tempdata/lucas/fmri/recordings/TR/neural/ses-1/bids:/data:ro \
-    -v /mnt/tempdata/lucas/fmri/recordings/TR/neural/ses-1/derivatives:/out \
-    -v /mnt/tempdata/lucas/fmri/tmp/fmriprep/work:/work \
+    -v /mnt/tempdata/lucas/fmri/recordings/TR/neural/final_all_ses/bids:/data:ro \
+    -v /mnt/tempdata/lucas/fmri/recordings/TR/neural/final_all_ses/derivatives:/out \
+    -v /mnt/tempdata/lucas/fmri/recordings/TR/neural/final_all_ses/work:/work \
     -v /home/lucas/projects/MGH_NACC+MULTFS/MULTFS/prep/fmriprep/licenses:/fs \
     -v $HOME/.cache/templateflow:/opt/templateflow \
     nipreps/fmriprep:23.2.0 \
     /data /out participant \
     --participant-label 01 \
     --fs-license-file /fs/license.txt \
-    --nthreads 64 --omp-nthreads 16 --mem-mb 400000 \
+    --nthreads 112 --omp-nthreads 8 --mem-mb 480000 \
     --output-spaces fsLR \
     --cifti-output 91k \
-    --stop-on-first-crash \
     --write-graph \
     --notrack
 
