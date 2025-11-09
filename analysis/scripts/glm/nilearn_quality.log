@@ -1,0 +1,24 @@
+🔬 NILEARN GLM QUALITY ASSESSMENT
+Following Nilearn tutorial best practices
+============================================================
+🔬 Loading data and fitting GLM...
+Files: True, True, True
+Original fMRI shape: (97, 115, 97, 184)
+After time masking: (97, 115, 97, 183)
+Events: 120
+Confounds shape: (183, 32)
+Fitting FirstLevelModel...
+✅ GLM fit complete
+
+========================================
+RUNNING QUALITY CHECKS
+========================================
+📊 Computing R-squared map...
+Traceback (most recent call last):
+  File "/lustre09/project/6002071/xuan/fmri_dataset_project/scripts/nilearn_quality_assessment.py", line 701, in <module>
+    main()
+  File "/lustre09/project/6002071/xuan/fmri_dataset_project/scripts/nilearn_quality_assessment.py", line 660, in main
+    assessment.compute_r_squared_map()
+  File "/lustre09/project/6002071/xuan/fmri_dataset_project/scripts/nilearn_quality_assessment.py", line 123, in compute_r_squared_map
+    r_squared_data = r_squared_img.get_fdata()
+AttributeError: 'list' object has no attribute 'get_fdata'

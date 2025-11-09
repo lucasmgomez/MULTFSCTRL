@@ -1,0 +1,54 @@
+Traceback (most recent call last):
+  File "/lustre09/project/6002071/xuan/fmri_dataset_project/scripts/run_single_session.py", line 242, in <module>
+    evaluation_metrics = evaluate_glm_performance(
+  File "/lustre09/project/6002071/xuan/fmri_dataset_project/scripts/glm_analysis_nilearn.py", line 271, in evaluate_glm_performance
+    axes[1,0].set_title(f'Residuals Over Time (Vertex {vertex_indices[sample_vertex]})')
+IndexError: index 383657 is out of bounds for axis 0 with size 115
+Traceback (most recent call last):
+  File "/lustre09/project/6002071/xuan/fmri_dataset_project/scripts/run_single_session.py", line 242, in <module>
+    evaluation_metrics = evaluate_glm_performance(
+  File "/lustre09/project/6002071/xuan/fmri_dataset_project/scripts/glm_analysis_nilearn.py", line 271, in evaluate_glm_performance
+    axes[1,0].set_title(f'Residuals Over Time (Vertex {vertex_indices[sample_vertex]})')
+IndexError: index 1645644 is out of bounds for axis 0 with size 115
+🚀 Running Nilearn GLM on ses-001 only...
+Processing sessions: ['ses-001']
+[ctxdm | ses-001] runs: ['run-01', 'run-02']
+
+Processing sub-01 ses-001 ctxdm run-01
+Loading fMRI data...
+Original fMRI timepoints: 184
+After time masking: 183 timepoints
+Processing events...
+Found 120 events
+Loading confounds...
+Original confounds shape: (184, 246)
+After time masking confounds: (183, 246)
+Final confounds matrix shape: (183, 32)
+Final fMRI timepoints: 183
+Fitting GLM with Nilearn FirstLevelModel...
+GLM fitting completed successfully
+Found 40 trial regressors
+Beta coefficients shape: (1082035, 40)
+Evaluating GLM performance...
+Evaluating GLM performance for sub-01_ses-001_task-ctxdm_run-01
+❌ Error processing sub-01 ses-001 ctxdm run-01: index 383657 is out of bounds for axis 0 with size 115
+
+Processing sub-01 ses-001 ctxdm run-02
+Loading fMRI data...
+Original fMRI timepoints: 184
+After time masking: 183 timepoints
+Processing events...
+Found 120 events
+Loading confounds...
+Original confounds shape: (184, 249)
+After time masking confounds: (183, 249)
+Final confounds matrix shape: (183, 32)
+Final fMRI timepoints: 183
+Fitting GLM with Nilearn FirstLevelModel...
+GLM fitting completed successfully
+Found 40 trial regressors
+Beta coefficients shape: (1082035, 40)
+Evaluating GLM performance...
+Evaluating GLM performance for sub-01_ses-001_task-ctxdm_run-02
+❌ Error processing sub-01 ses-001 ctxdm run-02: index 1645644 is out of bounds for axis 0 with size 115
+[✅] Single session GLM analysis completed.
