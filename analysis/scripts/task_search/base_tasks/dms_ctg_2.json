@@ -1,15 +1,15 @@
 {
     "n_frames": 3,
-    "first_shareable": 1,
+    "first_shareable": 3,
     "whens": [
-        "last2",
+        "last4",
         "last0"
     ],
     "operator": {
         "name": "IsSame",
         "child": [
             {
-                "name": "GetObject",
+                "name": "GetCategory",
                 "child": [
                     {
                         "name": "Select",
@@ -48,7 +48,7 @@
                 ]
             },
             {
-                "name": "GetObject",
+                "name": "GetCategory",
                 "child": [
                     {
                         "name": "Select",

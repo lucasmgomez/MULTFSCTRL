@@ -126,6 +126,10 @@ def random_merge():
         # Merge tasks
         taskA_info.merge(taskB_info)
 
+        import pdb; pdb.set_trace()
+        if taskA_info.frame_info.objset.end_epoch != list(range(0, taskA_info.n_epochs+1, 2)):
+            continue
+
         # Update frames_left
         frames_left -= taskA_info.n_epochs
 

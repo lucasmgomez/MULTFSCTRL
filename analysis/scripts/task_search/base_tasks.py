@@ -99,7 +99,149 @@ class DMSObject(TemporalTask):
         # Set the number of frames
         self.n_frames = helper.compare_when([when1, when2]) + 1
 
-# DMSObject(whens=['last2', 'last0'], reverse=reverse)
+"""
+DMS - New And
+"""
+
+class DMSA_LC(TemporalTask):
+    """
+    Compare objects on chosen frames are of the same location and category.
+    @param: whens: a list of two frame names to compare stimuli category between
+    """
+
+    def __init__(self, whens, first_shareable=None, reverse=False):
+        # Initialize Class with parent class
+        super(DMSA_LC, self).__init__(whens=whens, first_shareable=first_shareable)
+
+        # Get the whens
+        when1, when2 = self.whens[0], self.whens[1]
+
+        # Select the specified frames
+        objs1 = tg.Select(when=when1)
+        objs2 = tg.Select(when=when2)
+
+        # Get the location of stimuli within each frame
+        l1 = tg.GetLoc(objs1)
+        l2 = tg.GetLoc(objs2)
+
+        # Get the category of stimuli within each frame
+        c1 = tg.GetCategory(objs1)
+        c2 = tg.GetCategory(objs2)
+        
+        # Set operator to check if they're the same location and category
+        if reverse:
+            self._operator = tg.And(tg.IsSame(l2, l1), tg.IsSame(c2, c1))
+        else:
+            self._operator = tg.And(tg.IsSame(l1, l2), tg.IsSame(c1, c2))
+
+        # Set the number of frames
+        self.n_frames = helper.compare_when([when1, when2]) + 1
+
+class DMSA_LO(TemporalTask):
+    """
+    Compare objects on chosen frames are of the same location and object.
+    @param: whens: a list of two frame names to compare stimuli category between
+    """
+
+    def __init__(self, whens, first_shareable=None, reverse=False):
+        # Initialize Class with parent class
+        super(DMSA_LO, self).__init__(whens=whens, first_shareable=first_shareable)
+
+        # Get the whens
+        when1, when2 = self.whens[0], self.whens[1]
+
+        # Select the specified frames
+        objs1 = tg.Select(when=when1)
+        objs2 = tg.Select(when=when2)
+
+        # Get the location of stimuli within each frame
+        l1 = tg.GetLoc(objs1)
+        l2 = tg.GetLoc(objs2)
+
+        # Get the object of stimuli within each frame
+        o1 = tg.GetObject(objs1)
+        o2 = tg.GetObject(objs2)
+
+        # Set operator to check if they're the same location and object
+        if reverse:
+            self._operator = tg.And(tg.IsSame(l2, l1), tg.IsSame(o2, o1))
+        else:
+            self._operator = tg.And(tg.IsSame(l1, l2), tg.IsSame(o1, o2))
+
+        # Set the number of frames
+        self.n_frames = helper.compare_when([when1, when2]) + 1
+
+"""
+DMS - New OR
+"""
+
+class DMSO_LC(TemporalTask):
+    """
+    Compare objects on chosen frames are of the same location or category.
+    @param: whens: a list of two frame names to compare stimuli category between
+    """
+
+    def __init__(self, whens, first_shareable=None, reverse=False):
+        # Initialize Class with parent class
+        super(DMSO_LC, self).__init__(whens=whens, first_shareable=first_shareable)
+
+        # Get the whens
+        when1, when2 = self.whens[0], self.whens[1]
+
+        # Select the specified frames
+        objs1 = tg.Select(when=when1)
+        objs2 = tg.Select(when=when2)
+
+        # Get the location of stimuli within each frame
+        l1 = tg.GetLoc(objs1)
+        l2 = tg.GetLoc(objs2)
+
+        # Get the category of stimuli within each frame
+        c1 = tg.GetCategory(objs1)
+        c2 = tg.GetCategory(objs2)
+        
+        # Set operator to check if they're the same location or category
+        if reverse:
+            self._operator = tg.Or(tg.IsSame(l2, l1), tg.IsSame(c2, c1))
+        else:
+            self._operator = tg.Or(tg.IsSame(l1, l2), tg.IsSame(c1, c2))
+
+        # Set the number of frames
+        self.n_frames = helper.compare_when([when1, when2]) + 1
+
+class DMSO_LO(TemporalTask):
+    """
+    Compare objects on chosen frames are of the same location or object.
+    @param: whens: a list of two frame names to compare stimuli category between
+    """
+
+    def __init__(self, whens, first_shareable=None, reverse=False):
+        # Initialize Class with parent class
+        super(DMSO_LO, self).__init__(whens=whens, first_shareable=first_shareable)
+
+        # Get the whens
+        when1, when2 = self.whens[0], self.whens[1]
+
+        # Select the specified frames
+        objs1 = tg.Select(when=when1)
+        objs2 = tg.Select(when=when2)
+
+        # Get the location of stimuli within each frame
+        l1 = tg.GetLoc(objs1)
+        l2 = tg.GetLoc(objs2)
+
+        # Get the object of stimuli within each frame
+        o1 = tg.GetObject(objs1)
+        o2 = tg.GetObject(objs2)
+
+        # Set operator to check if they're the same location or object
+        if reverse:
+            self._operator = tg.Or(tg.IsSame(l2, l1), tg.IsSame(o2, o1))
+        else:
+            self._operator = tg.Or(tg.IsSame(l1, l2), tg.IsSame(o1, o2))
+
+        # Set the number of frames
+        self.n_frames = helper.compare_when([when1, when2]) + 1
 
 """
 New CTX Tasks
@@ -191,12 +333,18 @@ class ctxDM_COC(TemporalTask):
 
         # Set the number of frames
         self.n_frames = helper.compare_when([when1, when2]) + 1
-        
+
+"""
+MERGE FUNCTIONS
+"""
+
+def merge_tasks(DMS_tasks: list, max_objs: int)
+
 
 """
 WRITE TASKS TO JSON
 """
-from iwisdm import make
+from iwisdm import makeTm
 from iwisdm import read_write
 import json
 import os
@@ -215,17 +363,22 @@ print(env.env_spec.MAX_DELAY)
 
 # Create task instances
 reverse = False
-dms_loc = DMSLoc(whens=['last2', 'last0'], reverse=reverse)
-dms_ctg = DMSCategory(whens=['last2', 'last0'], reverse=reverse)
-dms_obj = DMSObject(whens=['last2', 'last0'], reverse=reverse)
-ctxdm_olc = ctxDM_OLC(whens=['last4', 'last2', 'last0'], reverse=reverse)
-ctxdm_lol = ctxDM_LOL(whens=['last4', 'last2', 'last0'], reverse=reverse)
-ctxdm_coc = ctxDM_COC(whens=['last4', 'last2', 'last0'], reverse=reverse)
 
-# Save tasks to JSON
-read_write.write_task(dms_loc , '/home/lucas/projects/MULTFSCTRL/analysis/scripts/task_search/base_tasks/dms_loc.json')
-read_write.write_task(dms_ctg , '/home/lucas/projects/MULTFSCTRL/analysis/scripts/task_search/base_tasks/dms_ctg.json')
-read_write.write_task(dms_obj , '/home/lucas/projects/MULTFSCTRL/analysis/scripts/task_search/base_tasks/dms_obj.json')
-read_write.write_task(ctxdm_olc , '/home/lucas/projects/MULTFSCTRL/analysis/scripts/task_search/base_tasks/ctxdm_olc.json')
-read_write.write_task(ctxdm_lol , '/home/lucas/projects/MULTFSCTRL/analysis/scripts/task_search/base_tasks/ctxdm_lol.json')
-read_write.write_task(ctxdm_coc , '/home/lucas/projects/MULTFSCTRL/analysis/scripts/task_search/base_tasks/ctxdm_coc.json') 
+
+# 
+
+
+# dms_loc = DMSLoc(whens=['last2', 'last0'], reverse=reverse)
+# dms_ctg = DMSCategory(whens=['last2', 'last0'], reverse=reverse)
+# dms_obj = DMSObject(whens=['last2', 'last0'], reverse=reverse)
+# ctxdm_olc = ctxDM_OLC(whens=['last4', 'last2', 'last0'], reverse=reverse)
+# ctxdm_lol = ctxDM_LOL(whens=['last4', 'last2', 'last0'], reverse=reverse)
+# ctxdm_coc = ctxDM_COC(whens=['last4', 'last2', 'last0'], reverse=reverse)
+
+# # Save tasks to JSON
+# read_write.write_task(dms_loc , '/home/lucas/projects/MULTFSCTRL/analysis/scripts/task_search/base_tasks/dms_loc.json')
+# read_write.write_task(dms_ctg , '/home/lucas/projects/MULTFSCTRL/analysis/scripts/task_search/base_tasks/dms_ctg.json')
+# read_write.write_task(dms_obj , '/home/lucas/projects/MULTFSCTRL/analysis/scripts/task_search/base_tasks/dms_obj.json')
+# read_write.write_task(ctxdm_olc , '/home/lucas/projects/MULTFSCTRL/analysis/scripts/task_search/base_tasks/ctxdm_olc.json')
+# read_write.write_task(ctxdm_lol , '/home/lucas/projects/MULTFSCTRL/analysis/scripts/task_search/base_tasks/ctxdm_lol.json')
+# read_write.write_task(ctxdm_coc , '/home/lucas/projects/MULTFSCTRL/analysis/scripts/task_search/base_tasks/ctxdm_coc.json') 
