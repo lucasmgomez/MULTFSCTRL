@@ -1,5 +1,6 @@
 **/control_trials/**
 analysis/scripts/task_search/*trials
+**/sanity_check/**
 
 # ======================
 # Python bytecode
