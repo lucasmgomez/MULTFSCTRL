@@ -295,3 +295,12 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+"""
+python create_events.py \
+  --input_dir /mnt/tempdata/lucas/fmri/recordings/TR/behav/sub-01/ses-02 \
+  --output_dir /mnt/tempdata/lucas/fmri/recordings/TR/behav/sub-01/ses-02/events \
+  --lss_mode both \
+  --final_delay_duration 3.48 \
+  --overwrite
+"""
