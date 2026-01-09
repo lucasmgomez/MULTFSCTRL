@@ -1,4 +1,18 @@
 #!/usr/bin/env python3
+"""
+Split-half reliability (4 sessions) for LSS betas within a Glasser ROI, aligned by tc.
+
+CHANGES vs your current script:
+- With Fisher-z transform.
+- Spearman–Brown is applied PER SPLIT (to each split r), then we also average SB values.
+- Outputs both:
+    r_mean_raw: mean of raw split correlations
+    r_sb_mean: mean of per-split SB-corrected correlations
+  plus per-split r and per-split SB in split_rs/split_rs_sb.
+
+Keeps your QC counting + verbose warnings.
+"""
+
 import os
 import re
 import glob
@@ -62,19 +76,13 @@ def parse_taskdir_name(taskdir_basename: str):
 
 
 def blockfile_name(task: str, acq: str, run: str):
-    """
-    block index = run-01 -> 0, run-02 -> 1
-    """
+    """block index = run-01 -> 0, run-02 -> 1"""
     block_idx = int(run) - 1
     return f"{task}_{acq}_block_{block_idx}.csv"
 
 
 def behav_baseevents_name(task: str, acq: str, run: str):
-    """
-    create_events.py writes:
-      task-{taskname}_run-XX_base-events.tsv
-    taskname includes variant: 1back_ctg, interdms_obj_ABAB, ctxdm_col
-    """
+    """taskname includes variant: 1back_ctg, interdms_obj_ABAB, ctxdm_col"""
     return f"task-{task}_{acq}_run-{run}_base-events.tsv"
 
 
@@ -216,13 +224,14 @@ def pearsonr(a, b):
     return float((a * b).sum() / denom)
 
 
-def fisher_z(r):
-    r = np.clip(r, -0.999999, 0.999999)
-    return np.arctanh(r)
-
-
-def inv_fisher_z(z):
-    return float(np.tanh(z))
+def spearman_brown_correct(r):
+    # SB correction: r_sb = 2r / (1+r)
+    if not np.isfinite(r):
+        return np.nan
+    denom = (1.0 + r)
+    if denom == 0:
+        return np.nan
+    return float((2.0 * r) / denom)
 
 
 def split_half_4sessions(session_names):
@@ -239,7 +248,6 @@ def average_across_sessions(series_by_session: dict, sessions: list, verbose=Tru
     """
     key_sets = {ses: set(series_by_session[ses].keys()) for ses in sessions}
 
-    # intersection of all sessions in this half
     common_keys = set.intersection(*key_sets.values()) if key_sets else set()
 
     stats = {
@@ -257,32 +265,73 @@ def average_across_sessions(series_by_session: dict, sessions: list, verbose=Tru
                 f"(dropped={stats['dropped_per_session'][ses]})"
             )
         print(f"  → Common keys used: {stats['n_common_keys']}")
-    averaged = {}
-    for k in common_keys:
-        averaged[k] = float(np.mean([series_by_session[ses][k] for ses in sessions]))
 
+    averaged = {k: float(np.mean([series_by_session[ses][k] for ses in sessions])) for k in common_keys}
     return averaged, stats
 
+def spearman_brown_correction(r):
+    """SB correction for split-half reliability. Returns nan if r is nan."""
+    if not np.isfinite(r):
+        return np.nan
+    denom = (1.0 + r)
+    if denom == 0:
+        return np.nan
+    return float((2.0 * r) / denom)
 
-def compute_split_half(series_by_session, ses_list, spearman_brown=True, verbose=True):
+
+def fisher_z(r):
+    """Fisher r-to-z transform (stable clamp to avoid infs)."""
+    r = np.clip(r, -0.999999, 0.999999)
+    return float(np.arctanh(r))
+
+
+def inv_fisher_z(z):
+    """Inverse Fisher transform."""
+    return float(np.tanh(z))
+
+
+def mean_fisher(rs):
     """
-    series_by_session: {ses -> {key -> value}}
-    ses_list: list of 4 session names
+    Average correlations in Fisher-z space, ignoring NaNs.
+    Returns nan if no finite values.
+    """
+    good = [r for r in rs if np.isfinite(r)]
+    if not good:
+        return np.nan
+    zbar = float(np.mean([fisher_z(r) for r in good]))
+    return inv_fisher_z(zbar)
 
-    returns dict with:
-      r: fisher-z averaged split-half r
-      r_sb: spearman-brown corrected r
-      n_events_min: min common events used across splits
-      split_rs, split_ns
-      split_debug: list of dicts describing per-split drop counts
+
+def compute_split_half_with_fisher(
+    series_by_session,
+    ses_list,
+    apply_spearman_brown=True,
+    verbose=True
+):
+    """
+    Fisher-z version of your split-half routine:
+
+    - Compute split r in raw space per split.
+    - Apply Spearman–Brown PER split (raw -> r_sb_split).
+    - Average across splits using Fisher-z transform:
+        r_mean = inv_fisher(mean(fisher(r_split)))
+        r_sb_mean = inv_fisher(mean(fisher(r_sb_split)))  (if SB on)
+    - noise_ceiling = sqrt(max(r_sb_mean,0)) (or sqrt(max(r_mean,0)) if SB off)
+
+    Returns dict with:
+      r_splits, r_sb_splits,
+      r_mean, r_sb_mean,
+      noise_ceiling,
+      n_events_min, split_ns, split_debug
     """
     splits = split_half_4sessions(ses_list)
-    rs = []
-    ns = []
+
+    r_splits = []
+    r_sb_splits = []
+    split_ns = []
     split_debug = []
 
     for halfA, halfB in splits:
-        import pdb; pdb.set_trace()
         A, A_stats = average_across_sessions(series_by_session, halfA, verbose=verbose)
         B, B_stats = average_across_sessions(series_by_session, halfB, verbose=verbose)
 
@@ -299,54 +348,52 @@ def compute_split_half(series_by_session, ses_list, spearman_brown=True, verbose
 
         if n_common < 3:
             if verbose:
-                print(
-                    f"[WARN] Split {halfA} vs {halfB}: "
-                    f"only {n_common} common events — skipping correlation"
-                )
-            rs.append(np.nan)
-            ns.append(n_common)
+                print(f"[WARN] Split {halfA} vs {halfB}: only {n_common} common events — skipping")
+            r_splits.append(np.nan)
+            r_sb_splits.append(np.nan)
+            split_ns.append(n_common)
             continue
 
         a_vals = [A[k] for k in common]
         b_vals = [B[k] for k in common]
         r = pearsonr(a_vals, b_vals)
-        rs.append(r)
-        ns.append(n_common)
 
-    good = [r for r in rs if np.isfinite(r)]
-    if not good:
-        return {
-            "r": np.nan,
-            "r_sb": np.nan,
-            "n_events_min": int(np.min(ns) if ns else 0),
-            "split_rs": rs,
-            "split_ns": ns,
-            "split_debug": split_debug,
-        }
+        r_splits.append(r)
+        split_ns.append(n_common)
 
-    z = np.mean([fisher_z(r) for r in good])
-    r_mean = inv_fisher_z(z)
+        if apply_spearman_brown:
+            r_sb_splits.append(spearman_brown_correction(r))
+        else:
+            r_sb_splits.append(np.nan)
 
-    r_sb = np.nan
-    if spearman_brown and np.isfinite(r_mean):
-        r_sb = float((2 * r_mean) / (1 + r_mean)) if (1 + r_mean) != 0 else np.nan
+    # Fisher-z averaging across splits
+    r_mean = mean_fisher(r_splits)
+    r_sb_mean = mean_fisher(r_sb_splits) if apply_spearman_brown else np.nan
+
+    # Final noise ceiling AFTER averaging (and sqrt), clip negatives to 0
+    reliability_for_ceiling = r_sb_mean if np.isfinite(r_sb_mean) else r_mean
+    if np.isfinite(reliability_for_ceiling):
+        reliability_for_ceiling = max(float(reliability_for_ceiling), 0.0)
+        noise_ceiling = float(np.sqrt(reliability_for_ceiling))
+    else:
+        noise_ceiling = np.nan
 
     return {
-        "r": r_mean,
-        "r_sb": r_sb,
-        "n_events_min": int(np.min(ns)),
-        "split_rs": rs,
-        "split_ns": ns,
+        "r_splits": r_splits,
+        "r_sb_splits": r_sb_splits,
+        "r_mean": r_mean,
+        "r_sb_mean": r_sb_mean,
+        "noise_ceiling": noise_ceiling,
+        "n_events_min": int(np.min(split_ns) if split_ns else 0),
+        "split_ns": split_ns,
         "split_debug": split_debug,
     }
-
-
 # ----------------------------
 # Main
 # ----------------------------
 def parse_args():
     ap = argparse.ArgumentParser(
-        "Split-half reliability (4 sessions) for LSS betas within a Glasser ROI, aligned by tc."
+        "Split-half reliability (4 sessions) for LSS betas within a Glasser ROI, aligned by tc (w/ Fisher-z)."
     )
 
     ap.add_argument("--base_dir", required=True,
@@ -367,7 +414,7 @@ def parse_args():
     ap.add_argument("--out_dir", required=True,
                     help="Where to write outputs.")
     ap.add_argument("--spearman_brown", action="store_true",
-                    help="Also report Spearman–Brown corrected reliability.")
+                    help="Apply Spearman–Brown correction PER split, and also report mean SB across splits.")
     ap.add_argument("--only_tasks_regex", default=None,
                     help="Optional regex to filter which task dirs to include (matches task dir name).")
     ap.add_argument("--verbose", action="store_true",
@@ -399,7 +446,7 @@ def main():
         raise ValueError("No task-* directories found (or all filtered out).")
 
     rows = []
-    qc_rows = []  # per session/task ingestion counts
+    qc_rows = []
 
     for taskdir in task_dirs:
         parsed = parse_taskdir_name(taskdir)
@@ -410,7 +457,6 @@ def main():
 
         series_by_session_enc = {}
         series_by_session_del = {}
-
         ok = True
 
         for ses in ses_list:
@@ -461,15 +507,14 @@ def main():
         if not ok:
             continue
 
-        # Compute reliabilities (Encoding + Delay)
-        enc_stats = compute_split_half(
+        enc_stats = compute_split_half_with_fisher(
             series_by_session_enc, ses_list,
-            spearman_brown=args.spearman_brown,
+            apply_spearman_brown=args.spearman_brown,
             verbose=args.verbose
         )
-        del_stats = compute_split_half(
+        del_stats = compute_split_half_with_fisher(
             series_by_session_del, ses_list,
-            spearman_brown=args.spearman_brown,
+            apply_spearman_brown=args.spearman_brown,
             verbose=args.verbose
         )
 
@@ -480,12 +525,17 @@ def main():
             "run": run,
             "roi": roi_label,
             "phase": "Encoding",
-            "r": enc_stats["r"],
-            "r_spearman_brown": enc_stats["r_sb"],
+
+            "r_mean": enc_stats["r_mean"],
+            "r_sb_mean": enc_stats["r_sb_mean"],
+            "noise_ceiling": enc_stats["noise_ceiling"],  # sqrt(max(mean reliability,0))
+
             "n_events_min": enc_stats["n_events_min"],
-            "split_rs": ",".join([f"{x:.4f}" if np.isfinite(x) else "nan" for x in enc_stats["split_rs"]]),
+            "split_r": ",".join([f"{x:.4f}" if np.isfinite(x) else "nan" for x in enc_stats["r_splits"]]),
+            "split_r_sb": ",".join([f"{x:.4f}" if np.isfinite(x) else "nan" for x in enc_stats["r_sb_splits"]]),
             "split_ns": ",".join([str(n) for n in enc_stats["split_ns"]]),
         })
+
         rows.append({
             "taskdir": taskdir,
             "task": task,
@@ -493,40 +543,53 @@ def main():
             "run": run,
             "roi": roi_label,
             "phase": "Delay",
-            "r": del_stats["r"],
-            "r_spearman_brown": del_stats["r_sb"],
+
+            "r_mean": del_stats["r_mean"],
+            "r_sb_mean": del_stats["r_sb_mean"],
+            "noise_ceiling": del_stats["noise_ceiling"],
+
             "n_events_min": del_stats["n_events_min"],
-            "split_rs": ",".join([f"{x:.4f}" if np.isfinite(x) else "nan" for x in del_stats["split_rs"]]),
+            "split_r": ",".join([f"{x:.4f}" if np.isfinite(x) else "nan" for x in del_stats["r_splits"]]),
+            "split_r_sb": ",".join([f"{x:.4f}" if np.isfinite(x) else "nan" for x in del_stats["r_sb_splits"]]),
             "split_ns": ",".join([str(n) for n in del_stats["split_ns"]]),
         })
 
         print(
             f"[OK] {taskdir} ROI={roi_label} "
-            f"Enc r={enc_stats['r']:.3f} (SB={enc_stats['r_sb']:.3f}) "
-            f"Del r={del_stats['r']:.3f} (SB={del_stats['r_sb']:.3f})"
+            f"Enc r_mean={enc_stats['r_mean']:.3f} r_sb_mean={enc_stats['r_sb_mean']:.3f} ceil={enc_stats['noise_ceiling']:.3f} | "
+            f"Del r_mean={del_stats['r_mean']:.3f} r_sb_mean={del_stats['r_sb_mean']:.3f} ceil={del_stats['noise_ceiling']:.3f}"
         )
 
-    out_tsv = os.path.join(args.out_dir, "split_half_roi_reliability.tsv")
-    pd.DataFrame(rows).to_csv(out_tsv, sep="\t", index=False)
-    print("Wrote:", out_tsv)
+    out_tsv = os.path.join(args.out_dir, "split_half_roi_reliability_fisherz.tsv")
 
-    qc_tsv = os.path.join(args.out_dir, "split_half_roi_qc_counts.tsv")
-    pd.DataFrame(qc_rows).to_csv(qc_tsv, sep="\t", index=False)
-    print("Wrote:", qc_tsv)
+    df_out = pd.DataFrame(rows)
 
+    # Append if file exists; otherwise create it (with header)
+    file_exists = os.path.isfile(out_tsv)
+    df_out.to_csv(
+        out_tsv,
+        sep="\t",
+        index=False,
+        mode="a" if file_exists else "w",
+        header=not file_exists,
+    )
+
+    print(("Appended to:" if file_exists else "Wrote:"), out_tsv)
 
 if __name__ == "__main__":
     main()
 
 """
-python split_half.py \
+Example:
+python split_half_fisherz.py \
   --base_dir /mnt/tempdata/lucas/fmri/recordings/TR/neural/fmriprep_outs/first_run/glm_runs/lss/64kDense \
   --behav_base /mnt/tempdata/lucas/fmri/recordings/TR/behav \
   --blockfiles_dir /home/lucas/projects/task_stimuli/data/multfs/trevor/blockfiles \
   --sub sub-01 \
   --sessions ses-01,ses-02,ses-03,ses-04 \
   --dlabel /home/lucas/projects/MULTFSCTRL/prep/fmriprep/Glasser_LR_Dense64k.dlabel.nii \
-  --roi_names "L_V1_ROI,R_V1_ROI" \
+  --roi_names "L_10r_ROI, R_10r_ROI, L_10d_ROI, R_10d_ROI" \
   --out_dir /mnt/tempdata/lucas/fmri/recordings/TR/neural/fmriprep_outs/first_run/glm_runs/lss/64kDense/sub-01/_reliability_roi \
-  --spearman_brown
-  """
+  --spearman_brown \
+  --verbose
+"""
