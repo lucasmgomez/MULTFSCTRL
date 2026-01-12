@@ -4,7 +4,7 @@ set -euo pipefail
 # --------- EDIT THESE PATHS / PARAMS ----------
 PY_SCRIPT="split_half_fisherz.py"
 
-BASE_DIR="/mnt/tempdata/lucas/fmri/recordings/TR/neural/fmriprep_outs/first_run/glm_runs/lss/64kDense"
+BASE_DIR="/mnt/tempdata/lucas/fmri/recordings/TR/neural/fmriprep_outs/first_run/glm_runs/lsa/64kDense"
 BEHAV_BASE="/mnt/tempdata/lucas/fmri/recordings/TR/behav"
 BLOCKFILES_DIR="/home/lucas/projects/task_stimuli/data/multfs/trevor/blockfiles"
 SUB="sub-01"

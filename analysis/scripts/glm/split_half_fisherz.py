@@ -60,7 +60,17 @@ def make_roi_mask(dlabel_path: str, roi_names):
 # ----------------------------
 TASKDIR_RE = re.compile(r"^task-(?P<task>[^_]+)_acq-(?P<acq>.+)_run-(?P<run>\d+)$")
 BETA_RE = re.compile(
-    r"lss-(EncTarget|DelayTarget)_(Enc\d{4}|Del\d{4})_events_beta-target\.dscalar\.nii$"
+    r"""
+    (?:
+        # LSS format
+        lss-(EncTarget|DelayTarget)_(Enc\d{4}|Del\d{4})_events_beta-target
+      |
+        # LSA format
+        lsa_[^_]+(?:_[^_]+)*_(Enc|Del)_(Enc\d{4}|Del\d{4})_beta
+    )
+    \.dscalar\.nii$
+    """,
+    re.VERBOSE
 )
 
 
@@ -147,7 +157,7 @@ def collect_session_series(
         "overwritten_keys": 0,
     }
 
-    beta_files = sorted(glob.glob(os.path.join(task_dir, "*_beta-target.dscalar.nii")))
+    beta_files = sorted(glob.glob(os.path.join(task_dir, "*beta*.dscalar.nii")))
     if not beta_files:
         raise FileNotFoundError(f"No beta dscalars found in: {task_dir}")
 
@@ -159,7 +169,7 @@ def collect_session_series(
             continue
 
         stats["matched_beta_pattern"] += 1
-        _, eid = m.group(1), m.group(2)  # Enc#### or Del####
+        eid = m.groups()[-1]   # last capture is always Enc#### or Del####
 
         if eid not in eventid_map:
             stats["missing_eventid"] += 1
