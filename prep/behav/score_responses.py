@@ -14,9 +14,15 @@ def _truth_to_resp_code(is_match: bool) -> int:
     """Boolean match -> expected response code (2=yes, 3=no)."""
     return 2 if is_match else 3
 
-
 def _is_missing(x) -> bool:
-    return pd.isna(x)
+    """
+    Treat NaN/NA and the string '--' (subject didn't respond) as missing.
+    """
+    if pd.isna(x):
+        return True
+    if isinstance(x, str) and x.strip() in {"--", ""}:
+        return True
+    return False
 
 # =========================
 # CtxDm scoring
