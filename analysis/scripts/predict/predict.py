@@ -90,6 +90,22 @@ def build_data(behav_dir, betas_dir, acts_dir, subj, sessions):
             
     return betas, acts
 
+def create_beta_mask(dlabel_path, rois, lateralize=False):
+    # Format rois
+    if lateralize == 'LR':
+        rois = ['L_' + roi + '_ROI' for roi in rois] + ['L_' + roi + '_ROI' for roi in rois]
+    elif lateralize == 'L':
+        rois = ['L_' + roi + '_ROI' for roi in rois]
+    elif lateralize == 'R':
+        rois = ['R_' + roi + '_ROI' for roi in rois]
+    
+    ...
+
+def select_data(betas, acts, rois, phase2predict = 'encoding'):
+    # Create roi/network mask
+
+
+
 def main():
     
     behav_dir = "/mnt/tempdata/lucas/fmri/recordings/TR/behav"
@@ -98,8 +114,17 @@ def main():
 
     subj = "sub-01"
     sessions = ["ses-01", "ses-02", "ses-03", "ses-04"]
-
+    rois = ['SFL', 'i6-8', 's6-8', 'IFJa', 'IFJp', 'IFSp', 'IFSa', '8BM', '8Av', '8Ad', '8BL', '8C', 
+            '9m', '9p', '9a', '9-46d', 'a9-46v', 'p9-46v', '46', '44', '45', '47l', '47m', '47s', 
+            'a47r', 'p47r', '10r', '10d', '10v', 'a10p', 'p10p', '10pp', '11l', '13l'] # list of rois, if network it should be "network"
+    lateralize = False # Whether to lateralize ROIs
     betas, acts = build_data(behav_dir, betas_dir, acts_dir, subj, sessions)
+
+    # rois/networks
+    # TODO: create roi/network mask
+
+    s_betas, s_acts = select_data(betas, acts, rois, lateralize, phase2predict = 'encoding')
+
 
 
 
