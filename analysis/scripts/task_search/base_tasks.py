@@ -2,9 +2,9 @@ import sys
 sys.path.append('/home/lucas/projects/iWISDM')
 
 from iwisdm.envs.shapenet.task_generator import TemporalTask
-import iwisdm.envs.shapenet.registration as env_reg
 import iwisdm.envs.shapenet.task_generator as tg
 import iwisdm.utils.helper as helper
+from iwisdm import make
 
 """
 DMS Tasks
@@ -335,50 +335,97 @@ class ctxDM_COC(TemporalTask):
         self.n_frames = helper.compare_when([when1, when2]) + 1
 
 """
-MERGE FUNCTIONS
+New 1-back And/Or Tasks
 """
 
-def merge_tasks(DMS_tasks: list, max_objs: int)
+def make_oneback_and_or(env, k, DMSA, reverse=False):
+    """
+    Create a one-back task with the specified parameters.
+    @param: k: number of frames to include in the task
+    @param: when1: first frame to compare
+    @param: when2: second frame to compare
+    @param: reverse: whether to reverse the comparison
+    """
 
+    # Code to make merged 1-back of length k
+    tasks = []
+
+    for _ in range(k):
+        tasks.append(DMSA(whens=['last2', 'last0'], reverse=reverse))
+
+    compo_infos = env.init_compositional_tasks(tasks)
+
+    merged_info = compo_infos[0]
+    for i in range(1, k):
+        merged_info.frame_info.first_shareable = 2 + (i-1)*2
+
+        info_to_merge = compo_infos[i]
+        info_to_merge.frame_info.first_shareable = 0
+
+        merged_info.merge(info_to_merge)
+
+    return merged_info
 
 """
-WRITE TASKS TO JSON
+New 2-back tasks
 """
-from iwisdm import makeTm
-from iwisdm import read_write
-import json
-import os
-import shutil
+def make_twoback(env, k, DMS, reverse=False):
+    """
+    Create a two-back task with the specified parameters.
+    @param: k: number of frames to include in the task
+    @param: when1: first frame to compare
+    @param: when2: second frame to compare
+    @param: reverse: whether to reverse the comparison
+    """
 
-stim_dir = '/mnt/tempdata/lucas/multi_task_data/stim/shapenet_fmri_fixed' 
+    # Code to make merged 2-back of length k
+    tasks = []
 
-# Create environment
-env = make(
-    env_id='ShapeNet',
-    dataset_fp=stim_dir,
-)
+    for _ in range(k):
+        tasks.append(DMS(whens=['last4', 'last0'], reverse=reverse))
 
-# Initialize environment
-print(env.env_spec.MAX_DELAY)
+    compo_infos = env.init_compositional_tasks(tasks)
 
-# Create task instances
-reverse = False
+    merged_info = compo_infos[0]
 
+    for i in range(1, k):
+        merged_info.frame_info.first_shareable = 2 + (i-1)*2
 
-# 
+        info_to_merge = compo_infos[i]
+        info_to_merge.frame_info.first_shareable = 0
 
+        merged_info.merge(info_to_merge)
 
-# dms_loc = DMSLoc(whens=['last2', 'last0'], reverse=reverse)
-# dms_ctg = DMSCategory(whens=['last2', 'last0'], reverse=reverse)
-# dms_obj = DMSObject(whens=['last2', 'last0'], reverse=reverse)
-# ctxdm_olc = ctxDM_OLC(whens=['last4', 'last2', 'last0'], reverse=reverse)
-# ctxdm_lol = ctxDM_LOL(whens=['last4', 'last2', 'last0'], reverse=reverse)
-# ctxdm_coc = ctxDM_COC(whens=['last4', 'last2', 'last0'], reverse=reverse)
+    return merged_info
 
-# # Save tasks to JSON
-# read_write.write_task(dms_loc , '/home/lucas/projects/MULTFSCTRL/analysis/scripts/task_search/base_tasks/dms_loc.json')
-# read_write.write_task(dms_ctg , '/home/lucas/projects/MULTFSCTRL/analysis/scripts/task_search/base_tasks/dms_ctg.json')
-# read_write.write_task(dms_obj , '/home/lucas/projects/MULTFSCTRL/analysis/scripts/task_search/base_tasks/dms_obj.json')
-# read_write.write_task(ctxdm_olc , '/home/lucas/projects/MULTFSCTRL/analysis/scripts/task_search/base_tasks/ctxdm_olc.json')
-# read_write.write_task(ctxdm_lol , '/home/lucas/projects/MULTFSCTRL/analysis/scripts/task_search/base_tasks/ctxdm_lol.json')
-# read_write.write_task(ctxdm_coc , '/home/lucas/projects/MULTFSCTRL/analysis/scripts/task_search/base_tasks/ctxdm_coc.json') 
+"""
+New Interdms Tasks
+"""
+
+def make_interdms(env, task_type, DMS, reverse=False):
+    if task_type == 'ABCABC':
+        taskA = DMS(whens=['last6', 'last0'], first_shareable=2, reverse=reverse)
+        taskB = DMS(whens=['last6', 'last0'], first_shareable=0, reverse=reverse)
+        taskC = DMS(whens=['last6', 'last0'], first_shareable=0, reverse=reverse)
+
+        taskA_info, taskB_info = env.init_compositional_tasks([taskA, taskB])
+        taskA_info.merge(taskB_info)
+
+        taskA_info.frame_info.first_shareable = 4
+
+        taskC_info, = env.init_compositional_tasks([taskC])
+        taskA_info.merge(taskC_info)
+    elif task_type == 'ABBCCA':
+        taskA = DMS(whens=['last10', 'last0'], first_shareable=2, reverse=reverse)
+        taskB = DMS(whens=['last2', 'last0'], first_shareable=0, reverse=reverse)
+        taskC = DMS(whens=['last2', 'last0'], first_shareable=0, reverse=reverse)
+
+        taskA_info, taskB_info = env.init_compositional_tasks([taskA, taskB])
+        taskA_info.merge(taskB_info)
+
+        taskA_info.frame_info.first_shareable = 6
+
+        taskC_info, = env.init_compositional_tasks([taskC])
+        taskA_info.merge(taskC_info)
+
+    return taskA_info
