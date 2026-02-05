@@ -169,7 +169,7 @@ def collect_session_series(
             continue
 
         stats["matched_beta_pattern"] += 1
-        eid = m.groups()[-1]   # last capture is always Enc#### or Del####
+        eid = m.group(2) or m.group(4)  # last capture is always Enc#### or Del####
 
         if eid not in eventid_map:
             stats["missing_eventid"] += 1
@@ -415,6 +415,7 @@ def parse_args():
     ap.add_argument("--sub", required=True, help="e.g. sub-01")
     ap.add_argument("--sessions", required=True,
                     help="Comma-separated sessions in order, e.g. ses-01,ses-02,ses-03,ses-04")
+    ap.add_argument("--events_type", required=True, help="type of events")
 
     ap.add_argument("--dlabel", required=True,
                     help="Glasser dlabel in SAME space as dscalars (Dense64k).")
@@ -476,7 +477,7 @@ def main():
                 ok = False
                 break
 
-            behav_events_dir = os.path.join(args.behav_base, args.sub, ses, "events")
+            behav_events_dir = os.path.join(args.behav_base, args.sub, ses, f"events_{args.events_type}")
             base_events = os.path.join(behav_events_dir, behav_baseevents_name(task, acq, run))
             if not os.path.isfile(base_events):
                 print("[WARN] Missing base-events:", base_events)

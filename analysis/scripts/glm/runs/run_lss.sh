@@ -13,6 +13,8 @@ TR="1.49"
 BEHAV_BASE="/mnt/tempdata/lucas/fmri/recordings/TR/behav"
 NEURAL_BASE="/mnt/tempdata/lucas/fmri/recordings/TR/neural/fmriprep_outs/first_run"
 
+EVENTS_TYPE="wofdelay"
+
 LSS_SCRIPT="/home/lucas/projects/MULTFSCTRL/analysis/scripts/glm/lss.py"
 
 # ---- CONDA CONFIG ----
@@ -20,7 +22,7 @@ CONDA_BASE="/home/lucas/miniconda3"
 CONDA_ENV="fmri_glm"
 
 # Where logs go
-LOG_DIR="${NEURAL_BASE}/glm_runs/lss/64kDense/${SUB}/_logs"
+LOG_DIR="${NEURAL_BASE}/glm_runs/lss_${EVENTS_TYPE}/64kDense/${SUB}/_logs"
 mkdir -p "${LOG_DIR}"
 
 # tmux session name
@@ -89,11 +91,11 @@ spawn_job () {
   fi
 
   if [[ -n "${ACQ_BEHAV}" ]]; then
-    EVENTS_DIR="${BEHAV_BASE}/${SUB}/${SES}/events/task-${TASK}_${ACQ_BEHAV}_run-${RUN}_LSS"
-    OUT_DIR="${NEURAL_BASE}/glm_runs/lss/64kDense/${SUB}/${SES}/task-${TASK}_acq-${ACQ_BEHAV}_run-${RUN}"
+    EVENTS_DIR="${BEHAV_BASE}/${SUB}/${SES}/events_lss_${EVENTS_TYPE}/task-${TASK}_${ACQ_BEHAV}_run-${RUN}_LSS"
+    OUT_DIR="${NEURAL_BASE}/glm_runs/lss_${EVENTS_TYPE}/64kDense/${SUB}/${SES}/task-${TASK}_acq-${ACQ_BEHAV}_run-${RUN}"
   else
-    EVENTS_DIR="${BEHAV_BASE}/${SUB}/${SES}/events/task-${TASK}_run-${RUN}_LSS"
-    OUT_DIR="${NEURAL_BASE}/glm_runs/lss/64kDense/${SUB}/${SES}/task-${TASK}_run-${RUN}"
+    EVENTS_DIR="${BEHAV_BASE}/${SUB}/${SES}/events_lss_${EVENTS_TYPE}/task-${TASK}_run-${RUN}_LSS"
+    OUT_DIR="${NEURAL_BASE}/glm_runs/lss_${EVENTS_TYPE}/64kDense/${SUB}/${SES}/task-${TASK}_run-${RUN}"
   fi
 
   local JOB_NAME="${SES}_${TASK}"

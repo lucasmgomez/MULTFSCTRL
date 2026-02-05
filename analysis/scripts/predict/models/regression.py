@@ -103,26 +103,29 @@ def pca_ridge_decode(activations, betas, avg_vertices, standardize_acts, standar
 
     return per_layer_results, per_layer_y_preds, regressors
         
-def pca_ridge_infer(activations, regressor, avg_vertices, standardize_acts, ridge_alpha, n_pcs=64)
+def pca_ridge_infer(activations, regressor, standardize_acts, n_pcs=64):
     """
     Perform inference using trained PCA-Ridge Regression models
 
     Parameters:
         activations (tensor): Activations tensor
         regressor (RidgeRegression): Trained Ridge regression model
+        standardize_acts (bool): Whether to standardize activations
+        n_pcs (int): Number of principal components to use
+
+    Returns:
+        y_preds (list): Predicted betas
     """
 
-    y_preds = []
-    
+    X = activations
+
     # Determine the number of principal components to use
     if n_pcs is None:
         n_components = 0
     elif n_pcs == 0:
-        n_components = determine_npcas(activations[layer])
+        n_components = determine_npcas(X)
     elif n_pcs > 0:
         n_components = n_pcs
-
-    X = activations
 
     # Standardize activations if required
     if standardize_acts:
@@ -135,10 +138,6 @@ def pca_ridge_infer(activations, regressor, avg_vertices, standardize_acts, ridg
     y_pred = regressor.predict(X)
 
     y_pred = np.expand_dims(y_pred, axis=1) # with mean
-    y_preds.append(y_pred.tolist())
 
-    # Stack predictions from all layers
-    y_preds = np.concatenate(y_preds, axis=1)
-
-    return y_preds
+    return y_pred
     

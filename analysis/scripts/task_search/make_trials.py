@@ -20,7 +20,6 @@ env = make(
     dataset_fp=stim_dir,
 )
 
-
 """ Helper functions """
 def map_loc_LoR(loc):
     x,_ = literal_eval(loc)
@@ -30,6 +29,17 @@ def map_loc_LoR(loc):
     else:
         return 1
 
+def collect_tcs(trials_dir):
+    tcs = []
+    for trial_folder in os.listdir(trials_dir):
+        with open(trials_dir + '/' + trial_folder + '/frames/task_info.json', 'r') as f:
+            trial_info = json.load(f)
+
+        tc = "_".join([str(map_loc_LoR(trial_info['objects'][i]['obj']['location'])) +
+                         str(trial_info['objects'][i]['obj']['object']) for i in range(len(trial_info['objects']))])
+        tcs.append(tc)
+    return tcs
+
 def check_tcs(trial_info, tcs):
 
     new_tc = "_".join([str(map_loc_LoR(trial_info['objects'][i]['obj']['location'])) +
@@ -37,25 +47,30 @@ def check_tcs(trial_info, tcs):
     
     return (new_tc in tcs, new_tc)
 
-def make_trials(task, task_info_func, n_trials, folder_fp, **kwargs):
+def make_trials(task, task_info_func, n_trials, folder_fp, remake=False, **kwargs):
 
     if os.path.exists(folder_fp):
-        shutil.rmtree(folder_fp)
-    os.makedirs(folder_fp)
+        if remake:
+            shutil.rmtree(folder_fp)
+            os.makedirs(folder_fp)
+            tcs = []
+        else:
+            tcs = collect_tcs(folder_fp)
+    else:
+        os.makedirs(folder_fp)
+        tcs = []
 
-    tcs = []
-
-    nts = 0
+    nts = 0 + len(tcs)
     while nts < n_trials:
         task_info = task_info_func(task, **kwargs)
 
-        imgs, _, info_dict, objset = task_info.generate_trial(canvas_size=env.env_spec.canvas_size,
+        imgs, _, info_dict = task_info.generate_trial(canvas_size=env.env_spec.canvas_size,
                                                         fixation_cue=True,
                                                         cue_on_action=True,
                                                         stim_data=env.stim_data.splits['train']['data'],
                                                         add_distractor_frame=0,
                                                         add_distractor_time=0,
-                                                        return_objset = True
+                                                        return_objset = False
                                                     )
 
         tcisin, tc = check_tcs(info_dict, tcs)
@@ -113,29 +128,16 @@ if __name__ == '__main__':
     # Make New InterDMS
     def interdms_info(interdms_task, **kwargs):
         return make_interdms(env=env, DMS=interdms_task, task_type=kwargs['task_type'])
-    # abcabc_loc_info = make_interdms(env,'ABCABC', DMSLoc, reverse=True)
-    # abcabc_ctg_info = make_interdms(env,'ABCABC', DMSCategory, reverse=True)
-    # abcabc_obj_info = make_interdms(env,'ABCABC', DMSObject, reverse=True)
-    # abbcca_loc_info = make_interdms(env,'ABBCCA', DMSLoc, reverse=True)
-    # abbcca_ctg_info = make_interdms(env,'ABBCCA', DMSCategory, reverse=True)
-    # abbcca_obj_info = make_interdms(env,'ABBCCA', DMSObject, reverse=True)
     interdms_ntrials = (2*4)**5 # NOTE: This is not the full space, but any more and it would take forver to run through the model
 
     # Make New 1-back And Or
     def oneback_andor_info(oneback_task, **kwargs):
         return make_oneback_and_or(env=env, DMSA=oneback_task, k=kwargs['k'])
-    # oneb_a_lc_info = make_oneback_and_or(env, 4, DMSA_LC, reverse=True)
-    # oneb_a_lo_info = make_oneback_and_or(env, 4, DMSA_LO, reverse=True)
-    # oneb_o_lc_info = make_oneback_and_or(env, 4, DMSO_LC, reverse=True)
-    # oneb_o_lo_info = make_oneback_and_or(env, 4, DMSO_LO, reverse=True)
     oneback_ntrials = (2*4)**5
 
     # Make New 2-back
     def twoback_info(twoback_task, **kwargs):
         return make_twoback(env=env, DMS=twoback_task, k=kwargs['k'])
-    # twob_loc_info = make_twoback(env, 4, DMSLoc, reverse=True)
-    # twob_ctg_info = make_twoback(env, 4, DMSCategory, reverse=True)
-    # twob_obj_info = make_twoback(env, 4, DMSObject, reverse=True)
     twoback_ntrials = (2*4)**5
 
     import argparse
@@ -160,17 +162,17 @@ if __name__ == '__main__':
     elif args.task == 'InterDMS':
         make_trials(DMSCategory, interdms_info, interdms_ntrials, base_dir + '/InterDMS_CTG_ABCABC', task_type='ABCABC')
         make_trials(DMSObject, interdms_info, interdms_ntrials, base_dir + '/InterDMS_OBJ_ABCABC', task_type='ABCABC')
-        # make_trials(DMSLoc, interdms_info, interdms_ntrials, base_dir + '/InterDMS_LOC_ABBCCA', task_type='ABBCCA')
-        # make_trials(DMSCategory, interdms_info, interdms_ntrials, base_dir + '/InterDMS_CTG_ABBCCA', task_type='ABBCCA')
-        # make_trials(DMSObject, interdms_info, interdms_ntrials, base_dir + '/InterDMS_OBJ_ABBCCA', task_type='ABBCCA')
+        make_trials(DMSLoc, interdms_info, interdms_ntrials, base_dir + '/InterDMS_LOC_ABBCCA', task_type='ABBCCA')
+        make_trials(DMSCategory, interdms_info, interdms_ntrials, base_dir + '/InterDMS_CTG_ABBCCA', task_type='ABBCCA')
+        make_trials(DMSObject, interdms_info, interdms_ntrials, base_dir + '/InterDMS_OBJ_ABBCCA', task_type='ABBCCA')
         make_trials(DMSLoc, interdms_info, interdms_ntrials, base_dir + '/InterDMS_LOC_ABCABC', task_type='ABCABC')
     elif args.task == 'OnebackAndOr': 
+        make_trials(DMSA_LC, oneback_andor_info, oneback_ntrials, base_dir + '/OnebackA_LC', k=4)
         make_trials(DMSA_LO, oneback_andor_info, oneback_ntrials, base_dir + '/OnebackA_LO', k=4)
         make_trials(DMSO_LC, oneback_andor_info, oneback_ntrials, base_dir + '/OnebackO_LC', k=4)
         make_trials(DMSO_LO, oneback_andor_info, oneback_ntrials, base_dir + '/OnebackO_LO', k=4)
-        make_trials(DMSA_LC, oneback_andor_info, oneback_ntrials, base_dir + '/OnebackA_LC', k=4)
     elif args.task == 'Twoback':
-        make_trials(DMSLoc, twoback_info, twoback_ntrials, base_dir + '/Twoback_LOC', k=4)
-        make_trials(DMSCategory, twoback_info, twoback_ntrials, base_dir + '/Twoback_CTG', k=4)
-        make_trials(DMSObject, twoback_info, twoback_ntrials, base_dir + '/Twoback_OBJ', k=4)
+        make_trials(DMSLoc, twoback_info, twoback_ntrials, base_dir + '/Twoback_LOC', k=3)
+        make_trials(DMSCategory, twoback_info, twoback_ntrials, base_dir + '/Twoback_CTG', k=3)
+        make_trials(DMSObject, twoback_info, twoback_ntrials, base_dir + '/Twoback_OBJ', k=3)
 

@@ -18,9 +18,6 @@ def parse_args():
     parser.add_argument('--output_dir', '-o', required=True,
                         help="Directory where events outputs will be saved (base-events + LSA folder).")
 
-    parser.add_argument('--final_delay_duration', type=float, default=3.48,
-                        help="Duration (s) for the final delay after the last stimulus in a trial.")
-
     parser.add_argument('--lsa_mode', choices=['encoding', 'delay', 'both'], default='both',
                         help="Which event set(s) to include in the LSA events file.")
 
@@ -70,11 +67,14 @@ def extract_metadata(filename):
     return task_name, run_num, timestamp
 
 
-def build_base_events(df, task_name, final_delay_duration):
+def build_base_events(df, task_name):
     """
     Build a base events table with one row per Encoding/Delay event.
     Columns:
       onset, duration, trial_type, phase, trial, pos, event_id
+
+    NOTE: We do NOT include the final delay after the last Encoding in a trial.
+          Only delays BETWEEN encodings are included.
     """
     if 'TrialNumber' in df.columns:
         df = df.sort_values('TrialNumber')
@@ -105,7 +105,7 @@ def build_base_events(df, task_name, final_delay_duration):
                     'pos': pos,
                 })
 
-            # Delay after this encoding position
+            # Delay AFTER this encoding position ONLY if there is a next encoding
             if i < len(stim_indices) - 1:
                 next_idx = stim_indices[i + 1]
                 next_on = row.get(f'stimulus_{next_idx}_onset')
@@ -121,17 +121,8 @@ def build_base_events(df, task_name, final_delay_duration):
                             'trial': trial_label,
                             'pos': pos,
                         })
-            else:
-                # Final delay
-                if pd.notna(s_off):
-                    base.append({
-                        'onset': float(s_off),
-                        'duration': float(final_delay_duration),
-                        'trial_type': f'{task_name}_Delay',
-                        'phase': 'Delay',
-                        'trial': trial_label,
-                        'pos': pos,
-                    })
+
+            # IMPORTANT: no "else" here -> no final delay added
 
     if not base:
         return pd.DataFrame()
@@ -154,7 +145,6 @@ def build_base_events(df, task_name, final_delay_duration):
     base_df['duration'] = base_df['duration'].round(4)
 
     return base_df
-
 
 def write_base_events(base_df, output_dir, task_name, run_num, overwrite):
     """Save a single block/run-level base events TSV for QC."""
@@ -223,7 +213,7 @@ def write_lsa_events_for_block(base_df, output_dir, task_name, run_num, overwrit
     return out_path
 
 
-def process_single_file(file_path, output_dir, final_delay_duration, overwrite, lsa_mode, save_base):
+def process_single_file(file_path, output_dir, overwrite, lsa_mode, save_base):
     base_name = os.path.basename(file_path)
     task_name, run_num, timestamp = extract_metadata(base_name)
 
@@ -236,7 +226,7 @@ def process_single_file(file_path, output_dir, final_delay_duration, overwrite, 
         print(f"   Error reading file: {e}")
         return
 
-    base_df = build_base_events(df, task_name, final_delay_duration)
+    base_df = build_base_events(df, task_name)
     if base_df.empty:
         print("   -> No usable events parsed. Skipping.")
         return
@@ -267,7 +257,6 @@ def main():
         process_single_file(
             f,
             args.output_dir,
-            final_delay_duration=args.final_delay_duration,
             overwrite=args.overwrite,
             lsa_mode=args.lsa_mode,
             save_base=args.save_base
@@ -280,9 +269,8 @@ if __name__ == "__main__":
 """
 Example:
 python create_events_lsa.py \
-  --input_dir /mnt/tempdata/lucas/fmri/recordings/TR/behav/sub-01/ses-02 \
-  --output_dir /mnt/tempdata/lucas/fmri/recordings/TR/behav/sub-01/ses-02/events \
+  --input_dir /mnt/tempdata/lucas/fmri/recordings/TR/behav/sub-01/ses-04 \
+  --output_dir /mnt/tempdata/lucas/fmri/recordings/TR/behav/sub-01/ses-04/events \
   --lsa_mode both \
-  --final_delay_duration 3.48 \
   --overwrite
 """

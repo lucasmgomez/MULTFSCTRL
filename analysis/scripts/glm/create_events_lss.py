@@ -18,9 +18,6 @@ def parse_args():
     parser.add_argument('--extract_responses', action='store_true',
                         help="(Kept for compatibility) Currently ignored.")
 
-    parser.add_argument('--final_delay_duration', type=float, default=3.48,
-                        help="Duration (s) for the final delay after the last stimulus in a trial.")
-
     parser.add_argument('--lss_mode', choices=['encoding', 'delay', 'both'], default='both',
                         help="Which LSS target-event set(s) to generate.")
 
@@ -65,7 +62,7 @@ def extract_metadata(filename):
 
     return task_name, run_num, timestamp
 
-def build_base_events(df, task_name, final_delay_duration):
+def build_base_events(df, task_name):
     """
     Build a base events table with one row per Encoding/Delay event.
     Columns:
@@ -116,17 +113,6 @@ def build_base_events(df, task_name, final_delay_duration):
                             'trial': trial_label,
                             'pos': pos,
                         })
-            else:
-                # Final delay
-                if pd.notna(s_off):
-                    base.append({
-                        'onset': float(s_off),
-                        'duration': float(final_delay_duration),
-                        'trial_type': f'{task_name}_Delay',
-                        'phase': 'Delay',
-                        'trial': trial_label,
-                        'pos': pos,
-                    })
 
     if not base:
         return pd.DataFrame()
@@ -243,7 +229,7 @@ def write_lss_files_for_block(base_df, output_dir, task_name, run_num, overwrite
     elif lss_mode in ('delay', 'both'):
         print("   -> No Delay events found; skipping delay LSS files.")
 
-def process_single_file(file_path, output_dir, final_delay_duration, overwrite, lss_mode, save_base):
+def process_single_file(file_path, output_dir, overwrite, lss_mode, save_base):
     base_name = os.path.basename(file_path)
     task_name, run_num, timestamp = extract_metadata(base_name)
 
@@ -256,7 +242,7 @@ def process_single_file(file_path, output_dir, final_delay_duration, overwrite, 
         print(f"   Error reading file: {e}")
         return
 
-    base_df = build_base_events(df, task_name, final_delay_duration)
+    base_df = build_base_events(df, task_name)
 
     if base_df.empty:
         print("   -> No usable events parsed. Skipping.")
@@ -287,7 +273,6 @@ def main():
         process_single_file(
             f,
             args.output_dir,
-            final_delay_duration=args.final_delay_duration,
             overwrite=args.overwrite,
             lss_mode=args.lss_mode,
             save_base=args.save_base
@@ -297,10 +282,9 @@ if __name__ == "__main__":
     main()
 
 """
-python create_events.py \
-  --input_dir /mnt/tempdata/lucas/fmri/recordings/TR/behav/sub-01/ses-02 \
-  --output_dir /mnt/tempdata/lucas/fmri/recordings/TR/behav/sub-01/ses-02/events \
+python create_events_lss.py \
+  --input_dir /mnt/tempdata/lucas/fmri/recordings/TR/behav/sub-01/ses-04 \
+  --output_dir /mnt/tempdata/lucas/fmri/recordings/TR/behav/sub-01/ses-04/events_lss_wofdelay \
   --lss_mode both \
-  --final_delay_duration 3.48 \
   --overwrite
 """
