@@ -101,7 +101,7 @@ def pca_ridge_decode(activations, betas, avg_vertices, standardize_acts, standar
         regressor.fit(X, y)
         regressors.append(regressor)
 
-    return per_layer_results, per_layer_y_preds, regressors
+    return per_layer_results, per_layer_y_preds, regressors, y
         
 def pca_ridge_infer(activations, regressor, standardize_acts, n_pcs=64):
     """

@@ -4,15 +4,15 @@ set -euo pipefail
 # --------- EDIT THESE PATHS / PARAMS ----------
 PY_SCRIPT="/home/lucas/projects/MULTFSCTRL/analysis/scripts/glm/split_half_fisherz.py"
 
-BASE_DIR="/mnt/tempdata/lucas/fmri/recordings/TR/neural/fmriprep_outs/first_run/glm_runs/lss_wofdelay/64kDense"
+BASE_DIR="/mnt/tempdata/lucas/fmri/recordings/TR/neural/fmriprep_outs/first_run/glm_runs/lsa_wfdelay/64kDense"
 BEHAV_BASE="/mnt/tempdata/lucas/fmri/recordings/TR/behav"
 BLOCKFILES_DIR="/home/lucas/projects/task_stimuli/data/multfs/trevor/blockfiles"
 SUB="sub-01"
 SESSIONS="ses-01,ses-02,ses-03,ses-04"
 DLABEL="/home/lucas/projects/MULTFSCTRL/prep/fmriprep/Glasser_LR_Dense64k.dlabel.nii"
-EVENTS_TYPE="lss_wofdelay"
+EVENTS_TYPE="wfdelay"
 
-OUT_DIR="${BASE_DIR}/${SUB}/_reliability_roi_wofdelay"
+OUT_DIR="${BASE_DIR}/${SUB}/_reliability_roi_wfdelay"
 # Optional: filter which task dirs
 ONLY_TASKS_REGEX=""   # e.g. "interdms|ctxdm" (leave empty for all)
 

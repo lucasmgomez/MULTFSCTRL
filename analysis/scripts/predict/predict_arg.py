@@ -216,8 +216,8 @@ def create_beta_mask(dlabel_info, roi, lateralize):
 
 
 def predict(betas, acts, model, avg_vertices, standardize_acts, standardize_betas, **model_kwargs):
-    result, _, regressor = model(acts, betas, avg_vertices=avg_vertices, standardize_acts=standardize_acts, standardize_betas=standardize_betas, **model_kwargs)
-    return result, _, regressor
+    result, _, regressor, y = model(acts, betas, avg_vertices=avg_vertices, standardize_acts=standardize_acts, standardize_betas=standardize_betas, **model_kwargs)
+    return result, _, regressor, y
 
 def main():
     parser = argparse.ArgumentParser(description="fMRI PCA Ridge Decoding")
@@ -319,6 +319,7 @@ def main():
 
     results = {}
     regressors = {}
+    betas_to_save = {}
     print(f"Starting decoding for {len(rois)} ROIs...")
     
     for roi in rois:
@@ -329,7 +330,7 @@ def main():
         curr_betas = s_betas[:, mask]
         
         try:
-            result, _ , regressor = predict(
+            result, _ , regressor, curr_betas_ = predict(
                 curr_betas, s_acts, 
                 model=pca_ridge_decode, 
                 avg_vertices=True, 
@@ -340,6 +341,7 @@ def main():
             )
             results[roi] = result
             regressors[roi] = regressor
+            betas_to_save[roi] = curr_betas_
             print(f"Finished {roi}")
         except Exception as e:
             print(f"Failed decoding {roi}: {e}")
@@ -362,5 +364,10 @@ def main():
         for layer_idx, reg in enumerate(regs):
             dump(reg, os.path.join(regressor_path, f'layer_{layer_idx}.joblib'))
 
+    # Save Betas as npz
+    betas_file = os.path.join(folder_path, 'betas.npz')
+    np.savez(betas_file, **betas_to_save)
+    print(f"Betas saved to {betas_file}")
+    
 if __name__ == "__main__":
     main()

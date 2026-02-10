@@ -1,5 +1,6 @@
 import json
 import matplotlib.pyplot as plt
+import numpy as np
 
 def plot_roi_performance(json_path, save_dir):
     with open(json_path, 'r') as f:
@@ -60,6 +61,7 @@ def plot_roi_performance(json_path, save_dir):
 
     # Visual formatting
     plt.xticks(rotation=45, ha='right', fontsize=10)
+    plt.yticks(np.arange(0, 0.7, 0.05), fontsize=10)
     plt.grid(axis='y', linestyle='--', alpha=0.5)
     plt.tight_layout()
 
@@ -68,6 +70,6 @@ def plot_roi_performance(json_path, save_dir):
     plt.show()
 
 if __name__ == "__main__":
-    results_fp = '/mnt/store1/lucas/checkpoints/fixed/tf_medium_full_3000eps_ubt_semifixed/results/test_delay_lsa/results.json'
-    save_dir = '/mnt/store1/lucas/checkpoints/fixed/tf_medium_full_3000eps_ubt_semifixed/results/test_delay_lsa'
+    results_fp = '/mnt/store1/lucas/checkpoints/tf_reg/untrained/tf_medium_untrained/results/frame-only_enc+delay_delay_lsa_wofdelay_LH/results.json'
+    save_dir = '/mnt/store1/lucas/checkpoints/tf_reg/untrained/tf_medium_untrained/results/frame-only_enc+delay_delay_lsa_wofdelay_LH'
     plot_roi_performance(results_fp, save_dir)

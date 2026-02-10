@@ -133,7 +133,7 @@ if __name__ == '__main__':
     # Make New 1-back And Or
     def oneback_andor_info(oneback_task, **kwargs):
         return make_oneback_and_or(env=env, DMSA=oneback_task, k=kwargs['k'])
-    oneback_ntrials = (2*4)**5
+    oneback_ntrials = 8192 #(2*4)**5
 
     # Make New 2-back
     def twoback_info(twoback_task, **kwargs):

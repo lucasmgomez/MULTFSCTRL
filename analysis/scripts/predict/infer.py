@@ -19,8 +19,8 @@ def get_best_layer(decode_results, roi):
     return int(best_layer)
 
 def get_activations(acts_fp):
-    acts_dict = torch.load(acts_fp)
-    all_acts = acts_dict['layer_activations']
+    acts_dict = torch.load(acts_fp, map_location='cpu') 
+    all_acts = acts_dict['layer_activations'].to(torch.float32)
     trial_idxs = acts_dict['trial_idxs']
     return all_acts.numpy(), trial_idxs
 
@@ -110,7 +110,7 @@ def main():
         except Exception as e:
             print(f"Failed decoding {roi}: {e}")
 
-        # Reshape into time dim and average across time
+        # Reshape into time dim
         pred_betas = pred_betas.reshape(pred_betas.shape[0]//time_dim, time_dim, -1)
         results[roi] = pred_betas
 
