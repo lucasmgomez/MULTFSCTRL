@@ -95,15 +95,20 @@ def main():
 
         # Get regressor
         regressor_fp = os.path.join(args.decode_results_dir, f'regressors/{roi}/layer_{blayer}.joblib')
+        pca_fp = os.path.join(args.decode_results_dir, f'regressors/{roi}/layer_{blayer}_pca.joblib')
+        scalar_fp = os.path.join(args.decode_results_dir, f'regressors/{roi}/layer_{blayer}_scalar.joblib')
         regressor =  load(regressor_fp)
+        pca = load(pca_fp)
+        scalar = load(scalar_fp)
 
         try:
             
             pred_betas = pca_ridge_infer(
                 roi_blayer_acts, 
                 regressor=regressor, 
+                pca=pca,
+                scalar=scalar,
                 standardize_acts=args.standardize_acts,
-                n_pcs=64
             )
 
             print(f"Finished {roi}")

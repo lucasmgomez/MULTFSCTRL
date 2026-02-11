@@ -1,5 +1,4 @@
 import os
-import shutil
 import pandas as pd
 import re
 import numpy as np
@@ -216,8 +215,8 @@ def create_beta_mask(dlabel_info, roi, lateralize):
 
 
 def predict(betas, acts, model, avg_vertices, standardize_acts, standardize_betas, **model_kwargs):
-    result, _, regressor, y = model(acts, betas, avg_vertices=avg_vertices, standardize_acts=standardize_acts, standardize_betas=standardize_betas, **model_kwargs)
-    return result, _, regressor, y
+    result, _, regressor, pca, scalar, y = model(acts, betas, avg_vertices=avg_vertices, standardize_acts=standardize_acts, standardize_betas=standardize_betas, **model_kwargs)
+    return result, _, regressor, pca, scalar, y
 
 def main():
     parser = argparse.ArgumentParser(description="fMRI PCA Ridge Decoding")
@@ -280,14 +279,10 @@ def main():
     # --- BLOCK 1: Load or Build Data ---
     if args.load_data:
         print(f"Loading preprocessed data from: {cache_dir}")
-        try:
-            s_betas = np.load(os.path.join(cache_dir, 's_betas.npy'))
-            s_acts = np.load(os.path.join(cache_dir, 's_acts.npy'))
-            print(f"Data loaded successfully. Shapes: Betas {s_betas.shape}, Acts {s_acts.shape}")
-        except FileNotFoundError as e:
-            print(f"Error: Could not find cached data files in {cache_dir}.")
-            print(f"Details: {e}")
-            return
+        s_betas = np.load(os.path.join(cache_dir, 's_betas.npy'))
+        s_acts = np.load(os.path.join(cache_dir, 's_acts.npy'))
+        print(f"Data loaded successfully. Shapes: Betas {s_betas.shape}, Acts {s_acts.shape}")
+
     else:
         print(f"Processing Subject: {args.subj}")
         print(f"Sessions: {args.sessions}")
@@ -306,11 +301,7 @@ def main():
     # --- BLOCK 2: Run ROI Decoding ---
     
     # Parse ROI string
-    try:
-        rois = ast.literal_eval(args.rois)
-    except Exception as e:
-        print(f"Error parsing ROI string: {e}")
-        return
+    rois = ast.literal_eval(args.rois)
 
     # Load glasser dlabel info
     dl = nib.load(args.dlabel_path)
@@ -318,7 +309,7 @@ def main():
     label_dict = dl.header.get_axis(0).label[0] 
 
     results = {}
-    regressors = {}
+    modules = {}
     betas_to_save = {}
     print(f"Starting decoding for {len(rois)} ROIs...")
     
@@ -329,22 +320,20 @@ def main():
         
         curr_betas = s_betas[:, mask]
         
-        try:
-            result, _ , regressor, curr_betas_ = predict(
-                curr_betas, s_acts, 
-                model=pca_ridge_decode, 
-                avg_vertices=True, 
-                standardize_acts=args.standardize_acts,
-                standardize_betas=args.standardize_betas,
-                ridge_alpha=0.5, 
-                n_pcs=64
-            )
-            results[roi] = result
-            regressors[roi] = regressor
-            betas_to_save[roi] = curr_betas_
-            print(f"Finished {roi}")
-        except Exception as e:
-            print(f"Failed decoding {roi}: {e}")
+       
+        result, _ , regressor, pca, scalar, curr_betas_ = predict(
+            curr_betas, s_acts, 
+            model=pca_ridge_decode, 
+            avg_vertices=True, 
+            standardize_acts=args.standardize_acts,
+            standardize_betas=args.standardize_betas,
+            ridge_alpha=0.5, 
+            n_pcs=64
+        )
+        results[roi] = result
+        modules[roi] = (regressor, pca, scalar)
+        betas_to_save[roi] = curr_betas_
+        print(f"Finished {roi}")
 
     # Save Results
     save_file = os.path.join(folder_path, 'results.json')
@@ -354,15 +343,14 @@ def main():
 
     # Save Regressors
     regressors_path = os.path.join(folder_path, 'regressors')
-    for k, regs in regressors.items():
+    for k, mods in modules.items():
         regressor_path = os.path.join(regressors_path, k)
-        if not os.path.exists(regressor_path):
-            os.makedirs(regressor_path)
-        else:
-            shutil.rmtree(regressor_path)
-            os.makedirs(regressor_path)
-        for layer_idx, reg in enumerate(regs):
+        os.makedirs(regressor_path, exist_ok=True)
+ 
+        for layer_idx, (reg, pca, scalar) in enumerate(zip(*mods)):
             dump(reg, os.path.join(regressor_path, f'layer_{layer_idx}.joblib'))
+            dump(pca, os.path.join(regressor_path, f'layer_{layer_idx}_pca.joblib'))
+            dump(scalar, os.path.join(regressor_path, f'layer_{layer_idx}_scalar.joblib'))
 
     # Save Betas as npz
     betas_file = os.path.join(folder_path, 'betas.npz')

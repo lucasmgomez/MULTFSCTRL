@@ -2,6 +2,7 @@ import numpy as np
 from sklearn.decomposition import PCA
 from sklearn.model_selection import KFold
 from sklearn.linear_model import Ridge
+from sklearn.preprocessing import StandardScaler
 from scipy.stats import pearsonr
 from tqdm import tqdm
 
@@ -30,17 +31,30 @@ def pca_ridge_decode(activations, betas, avg_vertices, standardize_acts, standar
     Parameters:
         activations (tensor): Activations tensor
         betas (tensor): Betas tensor
+        avg_vertices (bool): Whether to average betas across vertices
         standardize_acts (bool): Whether to standardize activations
         standardize_betas (bool): Whether to standardize betas
-        alpha (float): Ridge regression alpha parameter
+        ridge_alpha (float): Ridge regression alpha parameter
+        n_pcs (int or None): Number of principal components to use (if None, determine automatically)
     """
+
+    if avg_vertices:
+        y = np.mean(betas, axis=1) # mean of vertices
+    else:
+        y = betas
+
+    if standardize_betas:
+        y_scaler = StandardScaler()
+        y = y_scaler.fit_transform(y.reshape(-1, 1)).flatten()
 
     per_layer_results = {}
     per_layer_y_preds = []
+
+    scalars = []
     regressors = []
+    pcas = []
     for layer in tqdm(range(activations.shape[0])):
 
-        # Determine the number of principal components to use
         if n_pcs is None:
             n_components = 0
         elif n_pcs == 0:
@@ -48,27 +62,16 @@ def pca_ridge_decode(activations, betas, avg_vertices, standardize_acts, standar
         elif n_pcs > 0:
             n_components = n_pcs
 
-        # Flatten the activations and class vectors
         X = activations[layer]
-
-        if avg_vertices:
-            y = np.mean(betas, axis=1) # mean of vertices
-        else:
-            y = betas
-
-        # Standardize activations and betas if required
         if standardize_acts:
-            X = (X - X.mean(axis=0)) / X.std(axis=0)
-        if standardize_betas:
-            y = (y - y.mean()) / y.std()
+            acts_scaler = StandardScaler()
+            X = acts_scaler.fit_transform(X)
 
-        # Initialize K-Fold Cross-Validation
         kf = KFold(n_splits=10, shuffle=True, random_state=5112000)
 
-        # Arrays to store predictions
         y_pred = np.zeros(y.shape)
 
-        # Train a Ridge Regression model using the principal components
+
         regressor = Ridge(alpha=ridge_alpha)
 
         if n_components > 0:
@@ -77,21 +80,18 @@ def pca_ridge_decode(activations, betas, avg_vertices, standardize_acts, standar
 
         # Cross-validation loop
         for xidx, yidx in kf.split(X):
-            # Split into training and testing sets
             X_train, X_test = X[xidx], X[yidx]
             y_train, _ = y[xidx], y[yidx]
 
             regressor.fit(X_train, y_train)
 
-            # Predict on the test set
             y_pred[yidx] = regressor.predict(X_test)
 
-        y = y
-        y = np.expand_dims(y, axis=1) # with mean
-        y_pred = np.expand_dims(y_pred, axis=1) # with mean
-        mse = np.sum((y_pred - y)**2)
-        r = pearsonr(y_pred, y)[0][0] # with mean
-        results = {'mse': float(mse), 'r': float(r), 'nsamples': int(y.shape[0]), 'kf_nsplits': int(kf.get_n_splits()), 'npcas': int(n_components)} 
+        y_true = np.expand_dims(y, axis=1)
+        y_pred = np.expand_dims(y_pred, axis=1) 
+        mse = np.sum((y_pred - y_true)**2)
+        r = pearsonr(y_pred, y_true)[0][0] 
+        results = {'mse': float(mse), 'r': float(r), 'nsamples': int(y_true.shape[0]), 'kf_nsplits': int(kf.get_n_splits()), 'npcas': int(n_components)} 
         per_layer_results[layer] = results
         print('r:', r)
 
@@ -100,18 +100,21 @@ def pca_ridge_decode(activations, betas, avg_vertices, standardize_acts, standar
         # Full training on all data for final checkpoint
         regressor.fit(X, y)
         regressors.append(regressor)
+        pcas.append(pca)
+        scalars.append(acts_scaler)
 
-    return per_layer_results, per_layer_y_preds, regressors, y
+    return per_layer_results, per_layer_y_preds, regressors, pcas, scalars, y
         
-def pca_ridge_infer(activations, regressor, standardize_acts, n_pcs=64):
+def pca_ridge_infer(activations, regressor, pca, scalar, standardize_acts):
     """
     Perform inference using trained PCA-Ridge Regression models
 
     Parameters:
         activations (tensor): Activations tensor
         regressor (RidgeRegression): Trained Ridge regression model
+        pca (PCA): Trained PCA model
+        scalar (StandardScaler): Trained StandardScaler for activations
         standardize_acts (bool): Whether to standardize activations
-        n_pcs (int): Number of principal components to use
 
     Returns:
         y_preds (list): Predicted betas
@@ -119,25 +122,14 @@ def pca_ridge_infer(activations, regressor, standardize_acts, n_pcs=64):
 
     X = activations
 
-    # Determine the number of principal components to use
-    if n_pcs is None:
-        n_components = 0
-    elif n_pcs == 0:
-        n_components = determine_npcas(X)
-    elif n_pcs > 0:
-        n_components = n_pcs
-
-    # Standardize activations if required
     if standardize_acts:
-        X = (X - X.mean(axis=0)) / X.std(axis=0)
+        X = scalar.transform(X)
 
-    if n_components > 0:
-        pca = PCA(n_components=n_components)
-        X = pca.fit_transform(X)
+    if pca is not None:
+        X = pca.transform(X)
     
     y_pred = regressor.predict(X)
-
-    y_pred = np.expand_dims(y_pred, axis=1) # with mean
+    y_pred = np.expand_dims(y_pred, axis=1) 
 
     return y_pred
     

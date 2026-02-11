@@ -7,16 +7,15 @@ import nibabel as nib
 import argparse
 import ast
 
-# ---------------------------------------------------------
-# 1. Helpers 
-# ---------------------------------------------------------
+# ... [Helpers parse_taskdir_name, tc_format, get_trial_betas, 
+#      load_atlas_data, create_roi_mask remain the same] ...
 
-TASKDIR_RE = re.compile(r"^task-(?P<task>[^_]+)_acq-(?P<acq>.+)_run-(?P<run>\d+)")
+# (Keeping your helper functions as they were)
+TASKDIR_RE = re.compile(r"^task-(?P<task>[^_]+)_acq-(?P<acq>.+)_run-(?P<run>\d+)$")
 
 def parse_taskdir_name(taskdir_basename: str):
     m = TASKDIR_RE.match(taskdir_basename)
-    if not m:
-        return None
+    if not m: return None
     return m.group("task"), m.group("acq"), m.group("run")
 
 def tc_format(task, tc):
@@ -24,38 +23,26 @@ def tc_format(task, tc):
     correct_len = task_tc_len_map.get(task, len(str(tc))) 
     if len(str(tc)) < correct_len:
         tc = tc.zfill(correct_len)   
-    if task == '1back': 
+    if task == '1back':
         tc = tc[:10]
     return tc         
 
 def get_trial_betas(betas_task_dir, base_events, trial_num):
     trial_str = f"Trial{trial_num:02d}"
     trial_events = base_events[base_events['trial'] == trial_str]
-    
     if trial_events.empty:
         raise ValueError(f"No events found for {trial_str}")
 
     eids = trial_events['event_id'].to_list()
     loaded_betas = []
-
     for eid in eids:
         beta_file_pattern = os.path.join(betas_task_dir, f"*{eid}*.dscalar.nii")
         matches = glob.glob(beta_file_pattern)
-        
         if not matches:
              raise FileNotFoundError(f"No beta file found for pattern: {beta_file_pattern}")
-        
         b = nib.load(matches[0]).get_fdata().squeeze().astype(np.float32)
         loaded_betas.append(b)
-
-    if not loaded_betas:
-        raise ValueError("No betas loaded.")
-
     return np.stack(loaded_betas, axis=0)
-
-# ---------------------------------------------------------
-# 2. ROI Masking Helpers
-# ---------------------------------------------------------
 
 def load_atlas_data(dlabel_path):
     dl = nib.load(dlabel_path)
@@ -65,85 +52,60 @@ def load_atlas_data(dlabel_path):
 
 def create_roi_mask(dlabel_info, roi_name, lateralize='LR'):
     label_dict, data = dlabel_info
-    target_labels = []
-    
-    if lateralize == 'LR':
-        target_labels = [f'L_{roi_name}_ROI', f'R_{roi_name}_ROI']
-    elif lateralize == 'L':
-        target_labels = [f'L_{roi_name}_ROI']
-    elif lateralize == 'R':
-        target_labels = [f'R_{roi_name}_ROI']
-    else:
-        target_labels = [roi_name]
-
+    if lateralize == 'LR': target_labels = [f'L_{roi_name}_ROI', f'R_{roi_name}_ROI']
+    elif lateralize == 'L': target_labels = [f'L_{roi_name}_ROI']
+    elif lateralize == 'R': target_labels = [f'R_{roi_name}_ROI']
+    else: target_labels = [roi_name]
     matched_keys = [k for k, (name, _) in label_dict.items() if name in target_labels]
-    mask = np.isin(data, matched_keys)
-    return mask
+    return np.isin(data, matched_keys)
 
 # ---------------------------------------------------------
-# 3. Main Processing Logic
+# 3. Main Processing Logic (Modified)
 # ---------------------------------------------------------
 
 def main():
-    parser = argparse.ArgumentParser(description="Compute ROI Averaged Betas (ROI Averaged FIRST, then Z-Scored)")
-
-    # Paths
+    parser = argparse.ArgumentParser(description="Extract Individual Trial/Event ROI Betas")
+    # ... (Arguments remain same as your original script) ...
     parser.add_argument("--behav_dir", type=str, default="/mnt/tempdata/lucas/fmri/recordings/TR/behav")
     parser.add_argument("--betas_dir", type=str, default="/mnt/tempdata/lucas/fmri/recordings/TR/neural/fmriprep_outs/first_run/glm_runs/lsa_wfdelay/64kDense")
     parser.add_argument("--dlabel_path", type=str, default="/home/lucas/projects/MULTFSCTRL/prep/fmriprep/Glasser_LR_Dense64k.dlabel.nii")
     parser.add_argument("--save_path", type=str, default="./roi_results")
-    
-    # Config
     parser.add_argument("--subj", type=str, default="sub-01")
     parser.add_argument("--sessions", nargs="+", default=["ses-01", "ses-02", "ses-03", "ses-04"])
     parser.add_argument("--events_type", type=str, default='wfdelay')
     parser.add_argument("--lateralize", type=str, default='LR', choices=['LR', 'L', 'R'])
-    
-    default_rois = ['10pp','10v','47s','46','9-46d']
+    default_rois = ['10pp','10v','47s','46','9-46d'] # Shortened for example
     parser.add_argument("--rois", type=str, default=str(default_rois))
 
     args = parser.parse_args()
 
-    # --- 1. Load Atlas & ROIs ---
     try:
         roi_list = ast.literal_eval(args.rois)
     except Exception:
-        print("Error parsing ROIs. Using default list.")
         roi_list = default_rois
 
-    print(f"Loading Atlas: {args.dlabel_path}")
     atlas_info = load_atlas_data(args.dlabel_path)
-    
-    print("Pre-calculating ROI masks...")
-    roi_masks = {}
-    for roi in roi_list:
-        mask = create_roi_mask(atlas_info, roi, args.lateralize)
-        if mask.sum() > 0:
-            roi_masks[roi] = mask
+    roi_masks = {roi: create_roi_mask(atlas_info, roi, args.lateralize) for roi in roi_list}
+    roi_masks = {k: v for k, v in roi_masks.items() if v.sum() > 0}
 
-    # --- 2. Build Data Structure ---
     betas_storage = {}
-    
     subj_betas_dir = os.path.join(args.betas_dir, args.subj)
     subj_behav_dir = os.path.join(args.behav_dir, args.subj)
 
     for session in args.sessions:
-        print(f"Scanning Session: {session}...")
+        print(f"\nProcessing {args.subj} {session}...")
         betas_ses_dir = os.path.join(subj_betas_dir, session)
         behav_ses_dir = os.path.join(subj_behav_dir, session)
-
-        if not os.path.exists(betas_ses_dir):
-            continue
+        if not os.path.exists(betas_ses_dir): continue
 
         files = [d for d in os.listdir(betas_ses_dir) if d.startswith("task-")]
-
         for f in files:
+            print(f"  Checking {f}...")
             if f not in betas_storage: betas_storage[f] = {}
             parsed = parse_taskdir_name(f)
             if not parsed: continue
             task, acq, run = parsed
             
-            # Correct glob pattern with wildcard start
             hit = glob.glob(os.path.join(behav_ses_dir, f"*{task}_{acq}*block_{int(run)-1}*scored*.tsv"))
             if not hit: continue
             
@@ -160,93 +122,51 @@ def main():
                     trial_betas = get_trial_betas(betas_task_dir, events, trial)
                     if tc not in betas_storage[f]: betas_storage[f][tc] = []
                     betas_storage[f][tc].append(trial_betas)
+                    print(f"    Loaded betas for trial {trial} (tc={tc}) with shape {trial_betas.shape}")
                 except Exception: continue
 
-    # --- 3. Accumulate Data ---
-    print("\nAccumulating data...")
-    data_accumulator = [] 
-    metadata_accumulator = []
+    # --- 3. Extract ROI values WITHOUT Averaging ---
+    print("\nExtracting all trial/event values...")
+    results_data = []
 
     for f_name, tc_dict in betas_storage.items():
+        print(f"Processing {f_name} with {len(tc_dict)} unique trial types...")
         parsed = parse_taskdir_name(f_name)
         if not parsed: continue
         task, acq, run = parsed
 
         for tc, trial_list in tc_dict.items():
-            if not trial_list: continue
+            print(f"  Trial type {tc} has {len(trial_list)} repeats")
+            # trial_list is a list of arrays, each (n_events, n_vertices)
+            for repeat_idx, trial_data in enumerate(trial_list):
+                n_events = trial_data.shape[0]
+                
+                for event_idx in range(1, min(n_events, 10), 2):
+                    event_map = trial_data[event_idx, :] # (n_vertices,)
 
-            # Stack & Session Average
-            stacked_repeats = np.stack(trial_list, axis=0)
-            mean_repeats = np.mean(stacked_repeats, axis=0)
-            
-            data_accumulator.append(mean_repeats)
-            metadata_accumulator.append({
-                "subject": args.subj, "task": task, "acq": acq, "run": run, "tc": tc,
-                "n_repeats": len(trial_list), "n_events": mean_repeats.shape[0]
-            })
+                    for roi_name, mask in roi_masks.items():
+                        val = np.mean(event_map[mask])
+                        
+                        results_data.append({
+                            "subject": args.subj,
+                            "task": task,
+                            "acq": acq,
+                            "run": run,
+                            "tc": tc,
+                            "repeat_index": repeat_idx,
+                            "event_index": event_idx,
+                            "roi": roi_name,
+                            "beta": val
+                        })
 
-    if not data_accumulator:
-        print("No data processed.")
-        return
-
-    # --- 4. ROI Average THEN Z-Score (Modified Logic) ---
-    print(f"Stacking {len(data_accumulator)} blocks (Raw)...")
-    
-    # 
-    
-    # Stack RAW data: (Total_Events, N_Vertices)
-    full_stack_raw = np.concatenate(data_accumulator, axis=0)
-    
-    results_data = []
-
-    print("Processing ROIs: Averaging Vertices -> Z-Scoring Time Series...")
-    
-    for roi_name, mask in roi_masks.items():
-        # 1. Extract RAW ROI Average first
-        # Result: 1D array of shape (Total_Events,)
-        roi_raw_series = np.mean(full_stack_raw[:, mask], axis=1)
-        
-        # 2. Z-Score the single 1D time-series
-        # This matches the logic: (y - y.mean()) / y.std()
-        roi_mean = roi_raw_series.mean()
-        roi_std = roi_raw_series.std()
-        
-        if roi_std == 0: roi_std = 1.0
-        
-        roi_z_series = (roi_raw_series - roi_mean) / roi_std
-        
-        # 3. Slice back into original chunks using metadata
-        current_idx = 0
-        for meta in metadata_accumulator:
-            n_ev = meta['n_events']
-            
-            # Extract the specific chunk for this Task/Run
-            val = roi_z_series[current_idx : current_idx + n_ev]
-            current_idx += n_ev
-            
-            results_data.append({
-                "subject": meta['subject'],
-                "task": meta['task'],
-                "acq": meta['acq'],
-                "run": meta['run'],
-                "tc": meta['tc'],
-                "roi": roi_name,
-                "betas": val.tolist(), 
-                "n_repeats": meta['n_repeats']
-            })
-
-    # --- 5. Save CSV ---
     if results_data:
         df = pd.DataFrame(results_data)
-        df = df.sort_values(by=["task", "acq", "run", "tc", "roi"])
-        
         os.makedirs(args.save_path, exist_ok=True)
-        out_csv = os.path.join(args.save_path, f"{args.subj}_roi_zscored_avg_betas.csv")
-        
+        out_csv = os.path.join(args.save_path, f"{args.subj}_roi_all_trials.csv")
         df.to_csv(out_csv, index=False)
-        print(f"Done! Saved (Avg->Z) results to: {out_csv}")
+        print(f"Done! Saved {len(df)} rows to: {out_csv}")
     else:
-        print("No results generated.")
+        print("No data processed.")
 
 if __name__ == "__main__":
     main()
