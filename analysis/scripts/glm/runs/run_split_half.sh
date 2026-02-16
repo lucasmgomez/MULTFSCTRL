@@ -22,10 +22,16 @@ VERBOSE="--verbose"
 # ---------------------------------------------
 
 # Your ROI shortnames
+# names=(
+#   SFL i6-8 s6-8 IFJa IFJp IFSp IFSa 8BM 8Av 8Ad 8BL
+#   8C 9m 9p 9a 9-46d a9-46v p9-46v 46 44 45 47l 47m
+#   47s a47r p47r 10r 10d 10v a10p p10p 10pp 11l 13l
+# )
+
+# "['8BM', '8Av', '8Ad', '8BL', '8C', '9m', '9p', '9a', '9-46d', 'a9-46v', 'p9-46v', '46', '47l', '47m', '47s', 'a47r', 'p47r', '10r', '10d', '10v', 'a10p', 'p10p', '10pp', '11l']"
+
 names=(
-  SFL i6-8 s6-8 IFJa IFJp IFSp IFSa 8BM 8Av 8Ad 8BL
-  8C 9m 9p 9a 9-46d a9-46v p9-46v 46 44 45 47l 47m
-  47s a47r p47r 10r 10d 10v a10p p10p 10pp 11l 13l
+    8BM 8Av 8Ad 8BL 8C 9m 9p 9a 9-46d a9-46v p9-46v 46 47l 47m 47s a47r p47r 10r 10d 10v a10p p10p 10pp
 )
 
 mkdir -p "$OUT_DIR"

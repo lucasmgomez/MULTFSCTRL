@@ -9,7 +9,7 @@ import json
 import argparse
 import ast
 from joblib import dump
-from models.regression import pca_ridge_decode
+from models.regression import pls_decode
 
 # Regex to parse task info from beta file names
 TASKDIR_RE = re.compile(r"^task-(?P<task>[^_]+)_acq-(?P<acq>.+)_run-(?P<run>\d+)$")
@@ -244,8 +244,8 @@ def create_beta_mask(dlabel_info, roi, lateralize):
 
 
 def predict(betas, acts, model, avg_vertices, standardize_acts, standardize_betas, **model_kwargs):
-    result, _, regressor, pca, scalar, y, y_scalar = model(acts, betas, avg_vertices=avg_vertices, standardize_acts=standardize_acts, standardize_betas=standardize_betas, **model_kwargs)
-    return result, _, regressor, pca, scalar, y, y_scalar
+    result, _, regressor, scalar, y, y_scalar = model(acts, betas, avg_vertices=avg_vertices, standardize_acts=standardize_acts, standardize_betas=standardize_betas, **model_kwargs)
+    return result, _, regressor, scalar, y, y_scalar
 
 def main():
     parser = argparse.ArgumentParser(description="fMRI PCA Ridge Decoding")
@@ -277,9 +277,8 @@ def main():
                         help="If set, standardizes betas before decoding.")
     parser.add_argument("--standardize_acts", action='store_true', 
                         help="If set, standardizes activations before decoding.")   
-    parser.add_argument("--alphas", type=str, default="[0.1, 1.0, 10.0]", 
-                        help="String representation of a list of alpha values for RidgeCV.")
-    parser.add_argument("--n_pcs", type=int, default=128, help="Number of PCA components for regression")
+    parser.add_argument("--n_pcs", type=str, default="[10, 20, 30, 40, 50]",
+                        help="String representation of a list of n_components to try for PCA.")
     
     # Cache / Preprocessing Arguments
     parser.add_argument("--save_data", action='store_true', 
@@ -330,6 +329,7 @@ def main():
             phase2predict=args.phase2predict, 
             save_per_run=args.save_per_run, 
             cache_dir=cache_dir
+            
         )
         
         # Save Full Stack if requested
@@ -343,7 +343,7 @@ def main():
     
     # Parse ROI string
     rois = ast.literal_eval(args.rois)
-    alphas = [float(a) for a in ast.literal_eval(args.alphas)]
+    n_pcs = [float(a) for a in ast.literal_eval(args.n_pcs)]
 
     # Load glasser dlabel info
     dl = nib.load(args.dlabel_path)
@@ -364,17 +364,16 @@ def main():
         curr_betas = s_betas[:, mask]
         
        
-        result, _ , regressor, pca, scalar, curr_betas_, curr_betas_scalar = predict(
+        result, _ , regressor, scalar, curr_betas_, curr_betas_scalar = predict(
             curr_betas, s_acts, 
-            model=pca_ridge_decode, 
+            model=pls_decode, 
             avg_vertices=True, 
             standardize_acts=args.standardize_acts,
             standardize_betas=args.standardize_betas,
-            ridge_alphas=alphas, 
-            n_pcs=args.n_pcs
+            n_pcs=n_pcs
         )
         results[roi] = result
-        modules[roi] = (regressor, pca, scalar)
+        modules[roi] = (regressor, scalar)
         bscalars[roi] = curr_betas_scalar
         betas_to_save[roi] = curr_betas_
         print(f"Finished {roi}")
@@ -391,9 +390,8 @@ def main():
         regressor_path = os.path.join(regressors_path, k)
         os.makedirs(regressor_path, exist_ok=True)
  
-        for layer_idx, (reg, pca, scalar) in enumerate(zip(*mods)):
+        for layer_idx, (reg, scalar) in enumerate(zip(*mods)):
             dump(reg, os.path.join(regressor_path, f'layer_{layer_idx}.joblib'))
-            dump(pca, os.path.join(regressor_path, f'layer_{layer_idx}_pca.joblib'))
             dump(scalar, os.path.join(regressor_path, f'layer_{layer_idx}_scalar.joblib'))
 
         bscalar = bscalars[k]

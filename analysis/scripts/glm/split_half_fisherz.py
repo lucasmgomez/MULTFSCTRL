@@ -233,17 +233,6 @@ def pearsonr(a, b):
         return np.nan
     return float((a * b).sum() / denom)
 
-
-def spearman_brown_correct(r):
-    # SB correction: r_sb = 2r / (1+r)
-    if not np.isfinite(r):
-        return np.nan
-    denom = (1.0 + r)
-    if denom == 0:
-        return np.nan
-    return float((2.0 * r) / denom)
-
-
 def split_half_4sessions(session_names):
     splits = [((0, 1), (2, 3)), ((0, 2), (1, 3)), ((0, 3), (1, 2))]
     return [([session_names[i] for i in a], [session_names[i] for i in b]) for a, b in splits]

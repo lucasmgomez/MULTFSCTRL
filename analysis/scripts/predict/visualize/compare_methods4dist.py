@@ -26,7 +26,6 @@ def parse_beta_string(beta_str):
 def main():
     parser = argparse.ArgumentParser(description="Plot beta distributions per ROI")
     parser.add_argument("--lateralization", type=str, default="LH")
-    parser.add_argument("--ctrl_task", type=str, required=True)
     parser.add_argument("--rois", type=str, default="['10r', '46']")
     parser.add_argument("--base_dir", type=str, default="/mnt/store1/lucas/checkpoints/fixed/tf_medium_full_3000eps_ubt_semifixed/results")
     parser.add_argument("--betas_type", type=str, default="frame-only_enc+delay_delay_lsa_wfdelay")
@@ -43,21 +42,14 @@ def main():
     print(f"Loading true betas from: {args.csv_path}")
     df = pd.read_csv(args.csv_path)
 
-    # Filter logic: Check if 'task' column is a substring of ctrl_task (case-insensitive)
-    # e.g., if column is '1back' and ctrl_task is '1back_run1', this keeps the row.
-    df = df[(df['task'] + "_" + df['acq']).apply(lambda t: t.lower() in args.ctrl_task.lower())]
-    
-    if df.empty:
-        raise ValueError(f"No rows found in CSV where task is a substring of '{args.ctrl_task}'")
-
     # ---------------------------------------------------------
     # 2. Load "Predicted Betas" (Kept as is)
     # ---------------------------------------------------------
-    pred_betas_path = os.path.join(args.base_dir, f"ctrl_pred_betas/{args.lateralization}/{args.ctrl_task}/results.npz")
-    print(f"Loading predicted betas from: {pred_betas_path}")
-    pred_betas = np.load(pred_betas_path)
+    base_betas_path = os.path.join(args.base_dir, f"{args.betas_type}/betas.npz")
+    print(f"Loading betas from: {base_betas_path}")
+    base_betas = np.load(base_betas_path)
     
-    save_dir = os.path.join(args.base_dir, f"ctrl_pred_betas/{args.lateralization}/{args.ctrl_task}/plots")
+    save_dir = os.path.join(args.base_dir, f"{args.betas_type}/plots_compare_method")
     os.makedirs(save_dir, exist_ok=True)
 
     # ---------------------------------------------------------
@@ -80,35 +72,40 @@ def main():
             parsed_list = parse_beta_string(str(val_str))
             extracted_values.extend(parsed_list)
             
-        roi_tb = np.array(extracted_values)
+        roi_cb = np.array(extracted_values)
 
         # --- B. Extract Pred Betas ---
-        if region not in pred_betas:
+        if region not in base_betas:
              print(f"  Warning: ROI {region} not found in predicted .npz file. Skipping.")
              continue
              
-        roi_pb = pred_betas[region]
-        roi_pb_reshaped = roi_pb.reshape(-1, roi_pb.shape[-1]) if roi_pb.ndim > 1 else roi_pb
+        roi_bb = base_betas[region]
+
+        print(region, "CSV len", roi_cb.shape, "NPZ len", roi_bb.shape)
+        print(region, "CSV mean/std", roi_cb.mean(), roi_cb.std())
+        print(region, "NPZ mean/std", roi_bb.mean(), roi_bb.std())
+        print(region, "corr(CSV, NPZ) if same length:", 
+              np.corrcoef(roi_cb[:len(roi_bb)], roi_bb[:len(roi_cb)])[0,1] if len(roi_cb)==len(roi_bb) else "n/a")
 
         # --- C. Plotting ---
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6), sharex=True)
-        fig.suptitle(f"Task: {args.ctrl_task} - ROI: {region}\nDistribution Comparison", fontsize=14)
+        fig.suptitle(f"ROI: {region}\nDistribution Comparison", fontsize=14)
 
-        # Subplot 1: True Betas (from CSV)
-        tb_centers, tb_counts = get_freq_poly(roi_tb)
-        ax1.plot(tb_centers, tb_counts, color='green', linewidth=2)
-        ax1.axvline(roi_tb.mean(), color='green', linestyle='--', alpha=0.6, label=f'Mean: {roi_tb.mean():.4f}')
-        ax1.set_title(f"True Betas (n={len(roi_tb)})")
+        # Subplot 1: CSV Betas
+        cb_centers, cb_counts = get_freq_poly(roi_cb)
+        ax1.plot(cb_centers, cb_counts, color='green', linewidth=2)
+        ax1.axvline(roi_cb.mean(), color='green', linestyle='--', alpha=0.6, label=f'Mean: {roi_cb.mean():.4f}')
+        ax1.set_title(f"CSV Betas (n={len(roi_cb)})")
         ax1.set_ylabel("Frequency (Counts)")
         ax1.set_xlabel("Value")
         ax1.legend()
         ax1.grid(alpha=0.3)
 
-        # Subplot 2: Predicted Betas (from NPZ)
-        pb_centers, pb_counts = get_freq_poly(roi_pb_reshaped)
+        # Subplot 2: BASE Betas (from NPZ)
+        pb_centers, pb_counts = get_freq_poly(roi_bb)
         ax2.plot(pb_centers, pb_counts, color='purple', linewidth=2)
-        ax2.axvline(roi_pb_reshaped.mean(), color='purple', linestyle='--', alpha=0.6, label=f'Mean: {roi_pb_reshaped.mean():.4f}')
-        ax2.set_title("Predicted Betas")
+        ax2.axvline(roi_bb.mean(), color='purple', linestyle='--', alpha=0.6, label=f'Mean: {roi_bb.mean():.4f}')
+        ax2.set_title("Base Betas")
         ax2.set_ylabel("Frequency (Counts)")
         ax2.set_xlabel("Value")
         ax2.legend()

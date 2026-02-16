@@ -45,7 +45,7 @@ def main():
 
     # Filter logic: Check if 'task' column is a substring of ctrl_task (case-insensitive)
     # e.g., if column is '1back' and ctrl_task is '1back_run1', this keeps the row.
-    df = df[(df['task'] + "_" + df['acq']).apply(lambda t: t.lower() in args.ctrl_task.lower())]
+    # df = df[(df['task'] + "_" + df['acq']).apply(lambda t: t.lower() in args.ctrl_task.lower())]
     
     if df.empty:
         raise ValueError(f"No rows found in CSV where task is a substring of '{args.ctrl_task}'")
