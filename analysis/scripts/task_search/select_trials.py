@@ -32,9 +32,8 @@ def get_conditions_from_pth(acts_fp, selected_indices):
             
     return selected_conds
 
-    
 def tc_format(task, tc):
-    task_lengths = {
+    task_tc_len_map = {
         "InterDMS": 12,
         "Oneback": 12,
         "Twoback": 12,
@@ -42,14 +41,10 @@ def tc_format(task, tc):
         "DMSO": 4,
         "DMSA": 4
     }
-    task_tc_len_map = {'ctxdm': 6, 'interdms': 8, '1back': 12} 
 
     correct_len = task_tc_len_map.get(task, len(str(tc))) 
     if len(str(tc)) < correct_len:
         tc = tc.zfill(correct_len)   
-
-    if task == '1back': # truncates to 5 stimuli (10 loc x obj pairs)
-        tc = tc[:10]
 
     return tc         
 
@@ -166,7 +161,7 @@ def main():
                     'Task': task_name,
                     'ROI': region,
                     'Trial_Index': int(idx),
-                    'Condition': cond,
+                    'Condition': tc_format(task_name,cond),
                     'Threshold_Used': threshold_val
                 })
             
