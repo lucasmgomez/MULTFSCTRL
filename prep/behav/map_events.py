@@ -85,7 +85,7 @@ def parse_behav_filename(path: Path):
 
     return sub, ses, task, acq_part, run, ext
 
-def build_bids_target(bids_root: Path, src_file: Path):
+def build_bids_target(bids_root: Path, src_file: Path) -> Path:
     sub, ses, task, acq_part, run, ext = parse_behav_filename(src_file)
 
     # Put directly into <bids_root>/sub-XX/ses-YY/
@@ -102,6 +102,7 @@ def main():
     )
     ap.add_argument("--src_root", help="Root directory containing behavior files (with sub-XX/ses-YY structure).")
     ap.add_argument("--bids_root", help="Root of BIDS dataset to copy into.")
+    ap.add_argument("--sessions", nargs="+", help="Optional list of sessions to include (e.g., ses-01 ses-02). If not provided, includes all sessions.")
     ap.add_argument("--pattern", default="*.tsv",
                     help="Glob pattern for behavior files (default: *.tsv).")
     ap.add_argument("--dry-run", action="store_true",
@@ -116,13 +117,18 @@ def main():
     if not src_root.exists():
         raise SystemExit(f"Source root does not exist: {src_root}")
 
-    files = list(src_root.rglob(args.pattern))
+    search_pattern = f"sub-*/ses-*/{args.pattern}"
+    files = list(src_root.rglob(search_pattern))
 
     if not files:
         print(f"No files matching pattern '{args.pattern}' found under {src_root}")
         return
 
     for f in files:
+        if extract_sub_ses_from_path(f)[1] not in args.sessions:
+            print(f"[SKIP] Session not in specified sessions: {f}")
+            continue
+
         dest = build_bids_target(bids_root, f)
 
         if dest.exists() and not args.overwrite:
@@ -142,7 +148,8 @@ if __name__ == "__main__":
 """
 python map_events.py \
     --src_root /mnt/tempdata/lucas/fmri/recordings/TR/behav \
-    --bids_root /mnt/tempdata/lucas/fmri/recordings/TR/neural/final_all_ses/glasser_resampled \
+    --bids_root /mnt/tempdata/lucas/fmri/recordings/TR/neural/ses-5/bids \
+    --sessions ses-05 \
     --pattern "*.tsv" \
     --overwrite
 """

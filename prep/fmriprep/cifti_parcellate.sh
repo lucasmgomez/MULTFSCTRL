@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Set base directories
-basedir="/mnt/tempdata/lucas/fmri/recordings/TR/neural/fmriprep_outs/first_run/derivatives"
+basedir="/mnt/tempdata/lucas/fmri/recordings/TR/neural/fmriprep_outs/ctrl_run/derivatives"
 glasser_dlabel="/home/lucas/projects/MULTFSCTRL/prep/fmriprep/Glasser_LR_Dense64k.dlabel.nii"
 subj="sub-01"
 
@@ -11,7 +11,7 @@ for session_number in {1..4}; do
     session_id=$(printf "%02d" "$session_number")
 
     datadir="${basedir}/${subj}/ses-${session_id}/func"
-    targetdir="/mnt/tempdata/lucas/fmri/recordings/TR/neural/fmriprep_outs/first_run/glasser_parcellated/${subj}/ses-${session_id}"
+    targetdir="/mnt/tempdata/lucas/fmri/recordings/TR/neural/fmriprep_outs/ctrl_run/glasser_parcellated/${subj}/ses-${session_id}"
 
     mkdir -p "$targetdir"
     echo "Processing session: ses-${session_id}"

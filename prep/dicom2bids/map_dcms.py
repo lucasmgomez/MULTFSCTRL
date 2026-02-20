@@ -8,7 +8,7 @@ import pydicom
 
 # -------------------- Config --------------------
 FUNC_KEYWORDS = ("func", "task", "wm")
-LETTER_RE = re.compile(r"(?:[_\-]wm[_\-]?|task[_\-]wm[_\-]?)([ABC])\b", re.IGNORECASE)
+LETTER_RE = re.compile(r"(?:[_\-]wm[_\-]?|task[_\-]wm[_\-]?)([ABCD])\b", re.IGNORECASE)
 
 BLOCK_RE = re.compile(r"(?i)(^|[_-])block[_-]?(\d+)(?=$|[^A-Za-z0-9])")
 ALNUM_RE = re.compile(r'[^A-Za-z0-9]+')
@@ -85,7 +85,7 @@ def build_letter_queues(design_df):
     for _, r in design_df.iterrows():
         L = str(r["scan_type"]).strip().upper()
         block = str(r["block_file_name"]).strip()
-        if L in ("A","B","C"):
+        if L in ("A","B","C","D"):
             by_letter[L].append(block)
     return {L: deque(v) for L, v in by_letter.items()}
 
@@ -162,7 +162,7 @@ def main():
     planned_seriesdesc = [make_expected(b) for b in planned_blocks_raw]
     planned_protocol   = [make_expected(b) for b in planned_blocks_raw]
 
-    # Queues: nth A/B/C from design
+    # Queues: nth A/B/C/D from design
     letter_queues = build_letter_queues(design_sess)
 
     # -------- Scan DICOMs and group by series --------
@@ -245,12 +245,12 @@ def main():
             used_sbref_uids.add(best["SeriesInstanceUID"])
         pairs.append((b, best))  # (BOLD, SBRef or None)
 
-    # -------- Map runs in order using nth A/B/C queues --------
+    # -------- Map runs in order using nth A/B/C/D queues --------
     mapping_records = []  # per-run record (by acquisition order)
     for idx, (b, s) in enumerate(pairs, start=1):
         L = extract_letter(b["ProtocolName"] or b["SeriesDescription"]).upper()
-        if L not in ("A","B","C"):
-            print(f"[WARN] Run {idx}: couldn’t extract A/B/C from ProtocolName='{b['ProtocolName']}'. Skipping mapping.", file=sys.stderr)
+        if L not in ("A","B","C","D"):
+            print(f"[WARN] Run {idx}: couldn’t extract A/B/C/D from ProtocolName='{b['ProtocolName']}'. Skipping mapping.", file=sys.stderr)
             continue
 
         block_raw = plan_next_block(letter_queues, L)
@@ -412,13 +412,13 @@ if __name__ == "__main__":
 
 """
 python map_dcms.py \
-    -dicom_dir /mnt/tempdata/lucas/fmri/recordings/TR/neural/ses-1/dicom/raw \
+    -dicom_dir /mnt/tempdata/lucas/fmri/recordings/TR/neural/ses-5/dicom/raw \
     -design_tsv /mnt/tempdata/lucas/fmri/recordings/TR/study_design/study_designs/sub-01_design.tsv \
-    -out_root /mnt/tempdata/lucas/fmri/recordings/TR/neural/ses-1/dicom/mapped/sub-01/ses-01 \
+    -out_root /mnt/tempdata/lucas/fmri/recordings/TR/neural/ses-5/dicom/mapped \
     --copy_nonfunc \
-    --session 1 \
+    --session 5 \
     --strict \
-    --patient_study_prefix multfs_pilot \
+    --patient_study_prefix multfs_ctrl \
     --patient_sub 01 \
-    --patient_ses 01
+    --patient_ses 05
 """

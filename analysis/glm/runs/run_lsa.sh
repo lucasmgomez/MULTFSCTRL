@@ -6,12 +6,12 @@ set -euo pipefail
 #############################################
 
 SUB="sub-01"
-SESSIONS=( "ses-01" "ses-02" "ses-03" "ses-04" )
+SESSIONS=( ""ses-01" "ses-02" "ses-03" "ses-04" "ses-05"" )
 
 TR="1.49"
 
 BEHAV_BASE="/mnt/tempdata/lucas/fmri/recordings/TR/behav"
-NEURAL_BASE="/mnt/tempdata/lucas/fmri/recordings/TR/neural/fmriprep_outs/first_run"
+NEURAL_BASE="/mnt/tempdata/lucas/fmri/recordings/TR/neural/fmriprep_outs/ctrl_run"
 
 LSA_SCRIPT="/home/lucas/projects/MULTFSCTRL/analysis/scripts/glm/lsa.py"
 

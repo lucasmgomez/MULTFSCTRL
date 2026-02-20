@@ -1,4 +1,4 @@
-BASE=/mnt/tempdata/lucas/fmri/recordings/TR/neural/fmriprep_outs/first_run
+BASE=/mnt/tempdata/lucas/fmri/recordings/TR/neural/fmriprep_outs/ctrl_run
 
 # Run this first to create necessary directories
 mkdir -p \
@@ -51,7 +51,7 @@ docker run -ti --rm \
   --output-spaces fsLR \
   --cifti-output 91k \
   --write-graph \
-  --notrack
+  --notrack 2>&1 | tee "$BASE/fmriprep_run_$(date +%Y%m%d_%H%M).log"
 
 
 

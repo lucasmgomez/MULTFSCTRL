@@ -208,7 +208,7 @@ def single_session_job(input_file, output_file, ria_storage_remote, b0_field_id=
     print("Output path: ", remote_path)
     try:
         # with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmpdirname:
-        tmpdirname = f"/mnt/tempdata/lucas/fmri/tmp/dcm2niix_out/{session_name}"
+        tmpdirname = f"/mnt/tempdata/lucas/fmri/tmp/dcm2niix_out_ctrl/{session_name}"
         pathlib.Path(tmpdirname).mkdir(parents=True, exist_ok=True)
 
         # filesystem-only path: run heudiconv without datalad and operate on the tmp dir
