@@ -1,6 +1,7 @@
 **/control_trials/**
 analysis/scripts/task_search/*trials
 **/sanity_check/**
+analysis/predict/visualize/plot/*
 
 # ======================
 # Python bytecode

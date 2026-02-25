@@ -12,8 +12,9 @@ TR="1.49"
 
 BEHAV_BASE="/mnt/tempdata/lucas/fmri/recordings/TR/behav"
 NEURAL_BASE="/mnt/tempdata/lucas/fmri/recordings/TR/neural/fmriprep_outs/ctrl_run"
+EVENT_TYPE="_wfdelay"
 
-LSA_SCRIPT="/home/lucas/projects/MULTFSCTRL/analysis/scripts/glm/lsa.py"
+LSA_SCRIPT="/home/lucas/projects/MULTFSCTRL/analysis/glm/lsa.py"
 
 # ---- CONDA CONFIG ----
 CONDA_BASE="/home/lucas/miniconda3"
@@ -95,10 +96,10 @@ spawn_job () {
   # Folder: task-{TASK}_{ACQ_BEHAV}_run-{RUN}_LSA
   # File:   task-{TASK}_{ACQ_BEHAV}_run-{RUN}_lsa-events.tsv
   if [[ -n "${ACQ_BEHAV}" ]]; then
-    LSA_EVENTS_TSV="${BEHAV_BASE}/${SUB}/${SES}/events/task-${TASK}_${ACQ_BEHAV}_run-${RUN}_LSA/task-${TASK}_${ACQ_BEHAV}_run-${RUN}_lsa-events.tsv"
+    LSA_EVENTS_TSV="${BEHAV_BASE}/${SUB}/${SES}/events${EVENT_TYPE}/task-${TASK}_${ACQ_BEHAV}_run-${RUN}_LSA/task-${TASK}_${ACQ_BEHAV}_run-${RUN}_lsa-events.tsv"
     OUT_DIR="${NEURAL_BASE}/glm_runs/lsa/64kDense/${SUB}/${SES}/task-${TASK}_acq-${ACQ_BEHAV}_run-${RUN}"
   else
-    LSA_EVENTS_TSV="${BEHAV_BASE}/${SUB}/${SES}/events/task-${TASK}_run-${RUN}_LSA/task-${TASK}_run-${RUN}_lsa-events.tsv"
+    LSA_EVENTS_TSV="${BEHAV_BASE}/${SUB}/${SES}/events${EVENT_TYPE}/task-${TASK}_run-${RUN}_LSA/task-${TASK}_run-${RUN}_lsa-events.tsv"
     OUT_DIR="${NEURAL_BASE}/glm_runs/lsa/64kDense/${SUB}/${SES}/task-${TASK}_run-${RUN}"
   fi
 
