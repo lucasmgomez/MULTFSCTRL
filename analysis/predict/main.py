@@ -4,10 +4,11 @@ import ast
 import os
 import numpy as np
 import nibabel as nib
-from joblib import dump
-from models.regression import pls_decode, pca_ridge_decode
+from joblib import dump, load
 
+from regression import pls_decode, pca_ridge_decode, infer
 from predict import build_data, select_data, create_beta_mask, predict
+from infer import get_activations, select_acts, get_best_layer
 
 def main():
     parser = argparse.ArgumentParser(description="fMRI Decoding")
@@ -44,6 +45,15 @@ def main():
     parser.add_argument("--standardize_acts", action='store_true', 
                         help="If set, standardizes activations before decoding.")   
     
+    # Inference arguments
+    parser.add_argument("--infer", action='store_true',
+                        help="If set, runs inference using the specified model and saves results.")
+    parser.add_argument("--decode_results_dir", type=str, help="Path to decoding results directory")
+    parser.add_argument("--task_length", type=int, help="Number of images in task")
+    parser.add_argument("--phase", type=str, help="Phase to select activations based on: encoding/delay")
+    parser.add_argument("--pca", action='store_true', help="If set, applies PCA to activations before decoding.")
+
+    
     # Model Hyperparameters
     parser.add_argument("--pls_n_pcs", type=str, default="[10, 20, 30, 40, 50]",
                         help="String representation of a list of n_components to try for PLS.")
@@ -73,118 +83,182 @@ def main():
     
     args = parser.parse_args()
 
-    # Define results folder
-    folder_path = os.path.join(args.save_path, args.run_name)
-    os.makedirs(folder_path, exist_ok=True)
+    ### Run full regression fitting ###
+    if not args.infer:
     
-    cache_dir = args.data_cache_dir if args.data_cache_dir else folder_path
-
-    # --- BLOCK 1: Load or Build Data ---
-    if args.load_data:
-        print(f"Loading preprocessed data from: {cache_dir}")
-        s_betas = np.load(os.path.join(cache_dir, 's_betas.npy'))
-        s_acts = np.load(os.path.join(cache_dir, 's_acts.npy'))
-        print(f"Data loaded successfully. Shapes: Betas {s_betas.shape}, Acts {s_acts.shape}")
-
-    else:
-        print(f"Processing Subject: {args.subj}")
-        print(f"Sessions: {args.sessions}")
+        # Define results folder
+        folder_path = os.path.join(args.save_path, args.run_name)
+        os.makedirs(folder_path, exist_ok=True)
         
-        betas, acts = build_data(args.behav_dir, args.betas_dir, args.acts_dir, args.subj, args.sessions, events_type=args.events_type)
-        s_betas, s_acts = select_data(
-            betas, acts, 
-            phase2predict=args.phase2predict, 
-            save_per_run=args.save_per_run, 
-            cache_dir=cache_dir
-        )
-        
-        if args.save_data:
-            os.makedirs(cache_dir, exist_ok=True)
-            print(f"Saving processed data to: {cache_dir}")
-            np.save(os.path.join(cache_dir, 's_betas.npy'), s_betas)
-            np.save(os.path.join(cache_dir, 's_acts.npy'), s_acts)
+        cache_dir = args.data_cache_dir if args.data_cache_dir else folder_path
 
-    # --- BLOCK 2: Run ROI Decoding ---
-    rois = ast.literal_eval(args.rois)
+        # Load or Build Data
+        if args.load_data:
+            print(f"Loading preprocessed data from: {cache_dir}")
+            s_betas = np.load(os.path.join(cache_dir, 's_betas.npy'))
+            s_acts = np.load(os.path.join(cache_dir, 's_acts.npy'))
+            print(f"Data loaded successfully. Shapes: Betas {s_betas.shape}, Acts {s_acts.shape}")
 
-    dl = nib.load(args.dlabel_path)
-    data = dl.get_fdata().squeeze().astype(int)
-    label_dict = dl.header.get_axis(0).label[0] 
-
-    results = {}
-    modules = {}
-    bscalars = {}
-    betas_to_save = {}
-    print(f"Starting decoding for {len(rois)} ROIs using {args.model_type.upper()}...")
-    
-    for roi in rois:
-        mask = create_beta_mask((label_dict, data), roi, args.lateralize)
-        if mask.sum() == 0:
-            continue    
-        
-        curr_betas = s_betas[:, mask]
-        
-        if args.model_type == 'pls':
-            pls_n_pcs = [float(a) for a in ast.literal_eval(args.pls_n_pcs)]
-            res = predict(
-                curr_betas, s_acts, 
-                model=pls_decode, 
-                avg_vertices=True, 
-                standardize_acts=args.standardize_acts,
-                standardize_betas=args.standardize_betas,
-                n_pcs=pls_n_pcs
-            )
-            result, _, regressor, scalar, curr_betas_, curr_betas_scalar = res
-            modules[roi] = (regressor, scalar)
+        else:
+            print(f"Processing Subject: {args.subj}")
+            print(f"Sessions: {args.sessions}")
             
-        elif args.model_type == 'pca_ridge':
-            ridge_alphas = [float(a) for a in ast.literal_eval(args.ridge_alphas)]
-            res = predict(
-                curr_betas, s_acts, 
-                model=pca_ridge_decode, 
-                avg_vertices=True, 
-                standardize_acts=args.standardize_acts,
-                standardize_betas=args.standardize_betas,
-                ridge_alphas=ridge_alphas, 
-                n_pcs=args.ridge_n_pcs
+            betas, acts = build_data(args.behav_dir, args.betas_dir, args.acts_dir, args.subj, args.sessions, events_type=args.events_type)
+            s_betas, s_acts = select_data(
+                betas, acts, 
+                phase2predict=args.phase2predict, 
+                save_per_run=args.save_per_run, 
+                cache_dir=cache_dir
             )
-            result, _, regressor, pca, scalar, curr_betas_, curr_betas_scalar = res
-            modules[roi] = (regressor, pca, scalar)
+            
+            if args.save_data:
+                os.makedirs(cache_dir, exist_ok=True)
+                print(f"Saving processed data to: {cache_dir}")
+                np.save(os.path.join(cache_dir, 's_betas.npy'), s_betas)
+                np.save(os.path.join(cache_dir, 's_acts.npy'), s_acts)
 
-        results[roi] = result
-        bscalars[roi] = curr_betas_scalar
-        betas_to_save[roi] = curr_betas_
-        print(f"Finished {roi}")
+        # Run ROI Decoding
+        rois = ast.literal_eval(args.rois)
 
-    # Save Results
-    save_file = os.path.join(folder_path, 'results.json')
-    with open(save_file, 'w') as f:
-        json.dump(results, f)
-    print(f"Results saved to {save_file}")
+        dl = nib.load(args.dlabel_path)
+        data = dl.get_fdata().squeeze().astype(int)
+        label_dict = dl.header.get_axis(0).label[0] 
 
-    # Save Regressors
-    regressors_path = os.path.join(folder_path, 'regressors')
-    for k, mods in modules.items():
-        regressor_path = os.path.join(regressors_path, k)
-        os.makedirs(regressor_path, exist_ok=True)
- 
-        if args.model_type == 'pls':
-            for layer_idx, (reg, scalar) in enumerate(zip(*mods)):
-                dump(reg, os.path.join(regressor_path, f'layer_{layer_idx}.joblib'))
-                dump(scalar, os.path.join(regressor_path, f'layer_{layer_idx}_scalar.joblib'))
-        elif args.model_type == 'pca_ridge':
-            for layer_idx, (reg, pca, scalar) in enumerate(zip(*mods)):
-                dump(reg, os.path.join(regressor_path, f'layer_{layer_idx}.joblib'))
-                dump(pca, os.path.join(regressor_path, f'layer_{layer_idx}_pca.joblib'))
-                dump(scalar, os.path.join(regressor_path, f'layer_{layer_idx}_scalar.joblib'))
+        results = {}
+        modules = {}
+        bscalars = {}
+        betas_to_save = {}
+        print(f"Starting decoding for {len(rois)} ROIs using {args.model_type.upper()}...")
+        
+        for roi in rois:
+            mask = create_beta_mask((label_dict, data), roi, args.lateralize)
+            if mask.sum() == 0:
+                continue    
+            
+            curr_betas = s_betas[:, mask]
+            
+            if args.model_type == 'pls':
+                pls_n_pcs = [float(a) for a in ast.literal_eval(args.pls_n_pcs)]
+                res = predict(
+                    curr_betas, s_acts, 
+                    model=pls_decode, 
+                    avg_vertices=True, 
+                    standardize_acts=args.standardize_acts,
+                    standardize_betas=args.standardize_betas,
+                    n_pcs=pls_n_pcs
+                )
+                result, _, regressor, scalar, curr_betas_, curr_betas_scalar = res
+                modules[roi] = (regressor, scalar)
+                
+            elif args.model_type == 'pca_ridge':
+                ridge_alphas = [float(a) for a in ast.literal_eval(args.ridge_alphas)]
+                res = predict(
+                    curr_betas, s_acts, 
+                    model=pca_ridge_decode, 
+                    avg_vertices=True, 
+                    standardize_acts=args.standardize_acts,
+                    standardize_betas=args.standardize_betas,
+                    ridge_alphas=ridge_alphas, 
+                    n_pcs=args.ridge_n_pcs
+                )
+                result, _, regressor, pca, scalar, curr_betas_, curr_betas_scalar = res
+                modules[roi] = (regressor, pca, scalar)
 
-        bscalar = bscalars[k]
-        dump(bscalar, os.path.join(regressor_path, f'betas_scalar.joblib'))
+            results[roi] = result
+            bscalars[roi] = curr_betas_scalar
+            betas_to_save[roi] = curr_betas_
+            print(f"Finished {roi}")
 
-    # Save Betas as npz
-    betas_file = os.path.join(folder_path, 'betas.npz')
-    np.savez(betas_file, **betas_to_save)
-    print(f"Betas saved to {betas_file}")
+        # Save Results
+        save_file = os.path.join(folder_path, 'results.json')
+        with open(save_file, 'w') as f:
+            json.dump(results, f)
+        print(f"Results saved to {save_file}")
+
+        # Save Regressors
+        regressors_path = os.path.join(folder_path, 'regressors')
+        for k, mods in modules.items():
+            regressor_path = os.path.join(regressors_path, k)
+            os.makedirs(regressor_path, exist_ok=True)
+    
+            if args.model_type == 'pls':
+                for layer_idx, (reg, scalar) in enumerate(zip(*mods)):
+                    dump(reg, os.path.join(regressor_path, f'layer_{layer_idx}.joblib'))
+                    dump(scalar, os.path.join(regressor_path, f'layer_{layer_idx}_scalar.joblib'))
+            elif args.model_type == 'pca_ridge':
+                for layer_idx, (reg, pca, scalar) in enumerate(zip(*mods)):
+                    dump(reg, os.path.join(regressor_path, f'layer_{layer_idx}.joblib'))
+                    dump(pca, os.path.join(regressor_path, f'layer_{layer_idx}_pca.joblib'))
+                    dump(scalar, os.path.join(regressor_path, f'layer_{layer_idx}_scalar.joblib'))
+
+            bscalar = bscalars[k]
+            dump(bscalar, os.path.join(regressor_path, f'betas_scalar.joblib'))
+
+        # Save Betas as npz
+        betas_file = os.path.join(folder_path, 'betas.npz')
+        np.savez(betas_file, **betas_to_save)
+        print(f"Betas saved to {betas_file}")
+
+    ### Inference Only Run ###
+    elif args.infer:
+        # Load Acts
+        acts, trial_idxs = get_activations(args.acts_pth)
+        s_acts, time_dim = select_acts(acts, n_images=args.task_length, phase=args.phase)
+        
+        # Parse ROI string
+        try:
+            rois = ast.literal_eval(args.rois)
+        except Exception as e:
+            print(f"Error parsing ROI string: {e}")
+            return
+
+        decode_results_fp = os.path.join(args.decode_results_dir, f'results.json')
+        decode_results = json.load(open(decode_results_fp, 'r'))
+
+        print(f"Starting inference for {len(rois)} ROIs...")
+        
+        results = {}
+        for roi in rois:
+            # Get best layer
+            blayer = get_best_layer(decode_results, roi)
+            roi_blayer_acts = s_acts[blayer]
+
+            # Get regressor
+            regressor_fp = os.path.join(args.decode_results_dir, f'regressors/{roi}/layer_{blayer}.joblib')
+            if args.pca:
+                pca_fp = os.path.join(args.decode_results_dir, f'regressors/{roi}/layer_{blayer}_pca.joblib')
+                pca = load(pca_fp)
+            else: 
+                pca = None
+
+            scalar_fp = os.path.join(args.decode_results_dir, f'regressors/{roi}/layer_{blayer}_scalar.joblib')
+            regressor =  load(regressor_fp)
+
+            scalar = load(scalar_fp)
+
+            try:
+                pred_betas = infer(
+                    roi_blayer_acts, 
+                    regressor=regressor, 
+                    pca=pca,
+                    scalar=scalar,
+                    standardize_acts=args.standardize_acts,
+                )
+
+                print(f"Finished {roi}")
+            except Exception as e:
+                print(f"Failed decoding {roi}: {e}")
+
+            # Reshape into time dim
+            pred_betas = pred_betas.reshape(pred_betas.shape[0]//time_dim, time_dim, -1)
+            results[roi] = pred_betas
+
+        # Save Results
+        folder_path = os.path.join(args.save_path, args.run_name)
+        os.makedirs(folder_path, exist_ok=True)
+        save_file = os.path.join(folder_path, 'results.npz')
+        np.savez(save_file, **results)
+        print(f"Results saved to {save_file}")
     
 if __name__ == "__main__":
     main()

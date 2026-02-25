@@ -128,34 +128,6 @@ def pca_ridge_decode(activations, betas, avg_vertices, standardize_acts, standar
 
     return per_layer_results, per_layer_y_preds, final_regressors, pcas, scalars, y, y_scaler
         
-def pca_ridge_infer(activations, regressor, pca, scalar, standardize_acts):
-    """
-    Perform inference using trained PCA-Ridge Regression models
-
-    Parameters:
-        activations (tensor): Activations tensor
-        regressor (RidgeRegression): Trained Ridge regression model
-        pca (PCA): Trained PCA model
-        scalar (StandardScaler): Trained StandardScaler for activations
-        standardize_acts (bool): Whether to standardize activations
-
-    Returns:
-        y_preds (list): Predicted betas
-    """
-
-    X = activations
-
-    if standardize_acts:
-        X = scalar.transform(X)
-
-    if pca is not None:
-        X = pca.transform(X)
-    
-    y_pred = regressor.predict(X)
-    y_pred = np.expand_dims(y_pred, axis=1) 
-
-    return y_pred
-    
 def pls_decode(activations, betas, avg_vertices, standardize_acts, standardize_betas, n_components_list=[10, 20, 30, 40, 50], n_pcs=None):
     """
     Perform Grid Search using K-Fold CV to select the best n_components for PLS.
@@ -258,3 +230,32 @@ def pls_decode(activations, betas, avg_vertices, standardize_acts, standardize_b
         scalars.append(acts_scaler)
 
     return per_layer_results, per_layer_y_preds, final_regressors, scalars, y, y_scaler
+
+def infer(activations, regressor, pca, scalar, standardize_acts):
+    """
+    Perform inference using the trained regression model
+
+    Parameters:
+        activations (tensor): Activations tensor
+        regressor (RidgeRegression): Trained Ridge regression model
+        pca (PCA): Trained PCA model
+        scalar (StandardScaler): Trained StandardScaler for activations
+        standardize_acts (bool): Whether to standardize activations
+
+    Returns:
+        y_preds (list): Predicted betas
+    """
+
+    X = activations
+
+    if standardize_acts:
+        X = scalar.transform(X)
+
+    if pca is not None:
+        X = pca.transform(X)
+    
+    y_pred = regressor.predict(X)
+    y_pred = np.expand_dims(y_pred, axis=1) 
+
+    return y_pred
+    
