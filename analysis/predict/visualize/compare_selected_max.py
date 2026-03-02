@@ -1,6 +1,7 @@
 import os
 import glob
 import re
+import json
 import pandas as pd
 import numpy as np
 import nibabel as nib
@@ -36,12 +37,7 @@ def create_roi_mask(dlabel_info, roi_name, lateralize='LH_RH'):
 # ---------------------------------------------------------
 # 2. Main Extraction & Grouping (Max Delay per Trial)
 # ---------------------------------------------------------
-
-# ---------------------------------------------------------
-# 2. Main Extraction & Grouping (Max Delay per Trial)
-# ---------------------------------------------------------
 def extract_session5_roi_betas(ignored_tasks=None):
-    # Initialize the ignored tasks list if none is provided
     if ignored_tasks is None:
         ignored_tasks = []
         
@@ -63,16 +59,11 @@ def extract_session5_roi_betas(ignored_tasks=None):
 
     for event_file in event_files:
         basename = os.path.basename(event_file)
-        
         match = re.search(r'task-([^_]+)_(.+)_run-(\d+)_base-events\.tsv', basename)
         if not match: continue
             
         task = match.group(1)
-        
-        # --- NEW: Check if task is in the ignore list ---
-        if task in ignored_tasks:
-            # print(f"Skipping ignored task: {task}") # Uncomment to see what gets skipped
-            continue
+        if task in ignored_tasks: continue
             
         acq = match.group(2)
         run_str = match.group(3)
@@ -99,7 +90,6 @@ def extract_session5_roi_betas(ignored_tasks=None):
             event_id = row['event_id']
             t_type = row['trial_type']
             trial_num = row['trial']
-            
             unique_trial_id = f"{task}_{acq}_{run_formatted}_{trial_num}"
             
             beta_search = glob.glob(os.path.join(task_beta_dir, f"*{event_id}_beta.dscalar.nii"))
@@ -116,45 +106,27 @@ def extract_session5_roi_betas(ignored_tasks=None):
                 print(f"Error loading {beta_search[0]}: {e}")
                 continue
 
-    # Z-Score and Group by Trial
-    print("\nZ-scoring delays and extracting Maximum Delay per trial...")
     results = {}
-
     for roi in rois:
         if not roi_data[roi]['beta_val']: continue
-
         df = pd.DataFrame(roi_data[roi])
-        
-        mean_val = df['beta_val'].mean()
-        std_val = df['beta_val'].std()
+        mean_val, std_val = df['beta_val'].mean(), df['beta_val'].std()
         if std_val == 0: std_val = 1e-8
         df['z_beta'] = (df['beta_val'] - mean_val) / std_val
         
-        trial_df = df.groupby('trial_id').agg({
-            'z_beta': 'max',
-            'trial_type': 'first'
-        }).reset_index()
-        
-        target_outlier_label = f"outlier_{roi}"
-        random_maxes = trial_df[trial_df['trial_type'] == 'random']['z_beta'].values
-        selected_maxes = trial_df[trial_df['trial_type'] == target_outlier_label]['z_beta'].values
+        trial_df = df.groupby('trial_id').agg({'z_beta': 'max', 'trial_type': 'first'}).reset_index()
         
         results[roi] = {
-            'random': random_maxes,       
-            'selected': selected_maxes    
+            'random': trial_df[trial_df['trial_type'] == 'random']['z_beta'].values,
+            'selected': trial_df[trial_df['trial_type'] == f"outlier_{roi}"]['z_beta'].values
         }
-        
-        print(f"ROI: {roi:^8} | "
-              f"Random Trials: {len(random_maxes):<3} | Selected Targets: {len(selected_maxes):<3}")
-
     return results
 
 # ---------------------------------------------------------
 # 3. Plotting Distributions & Bar Charts
 # ---------------------------------------------------------
-def plot_roi_distributions(results):
+def plot_roi_distributions(results, max_r_map=None):
     rois = list(results.keys())
-    
     fig, axes = plt.subplots(nrows=3, ncols=4, figsize=(22, 16))
     sns.set_theme(style="whitegrid")
     
@@ -168,60 +140,54 @@ def plot_roi_distributions(results):
         selected_betas = results[roi]['selected']
         
         if len(random_betas) == 0 or len(selected_betas) == 0:
-            ax_dist.set_title(f"{roi} (Insufficient Data)")
-            ax_dist.axis('off')
-            ax_bar.axis('off')
+            ax_dist.set_title(f"{roi} (No Data)")
             continue
-            
-        # --- A. KDE Distribution Plot ---
-        sns.kdeplot(x=random_betas, ax=ax_dist, color='#3498db', label='Random Density', linewidth=2, fill=True, alpha=0.1)
-        sns.kdeplot(x=selected_betas, ax=ax_dist, color='#e74c3c', label='Targeted Density', linewidth=2, fill=True, alpha=0.1)
-        
-        rand_mean, rand_med = np.mean(random_betas), np.median(random_betas)
-        sel_mean, sel_med = np.mean(selected_betas), np.median(selected_betas)
-        
-        ax_dist.axvline(rand_mean, color='#2980b9', linestyle='-', linewidth=2, label='Random Mean')
-        ax_dist.axvline(rand_med, color='#2980b9', linestyle='--', linewidth=2, label='Random Median')
-        ax_dist.axvline(sel_mean, color='#c0392b', linestyle='-', linewidth=2, label='Targeted Mean')
-        ax_dist.axvline(sel_med, color='#c0392b', linestyle='--', linewidth=2, label='Targeted Median')
-        
-        ax_dist.set_title(f"{roi}: Peak Delay Distribution", fontsize=14, fontweight='bold')
-        ax_dist.set_xlabel("Maximum Z-Scored Delay per Trial")
-        ax_dist.set_ylabel("Density")
-        ax_dist.legend(fontsize=9, loc='upper right')
-        
-        # Protect against empty slices in percentiles
-        all_vals = np.concatenate([random_betas, selected_betas])
-        if len(all_vals) > 0:
-            p1, p99 = np.percentile(all_vals, [1, 99])
-            ax_dist.set_xlim(p1 - 1, p99 + 1)
 
-        # --- B. Bar Plot with SEM ---
-        rand_sem = np.std(random_betas, ddof=1) / np.sqrt(len(random_betas)) if len(random_betas) > 1 else 0
-        sel_sem = np.std(selected_betas, ddof=1) / np.sqrt(len(selected_betas)) if len(selected_betas) > 1 else 0
-        
-        bars = ax_bar.bar(
-            x=['Random', f'Targeted\n({roi})'], 
-            height=[rand_mean, sel_mean], 
-            yerr=[rand_sem, sel_sem], 
-            capsize=8,              
-            color=['#3498db', '#e74c3c'], 
-            alpha=0.8,
-            edgecolor='black',
-            linewidth=1.5
-        )
-        
-        ax_bar.set_title(f"{roi}: Mean of Peak Delays", fontsize=14, fontweight='bold')
-        ax_bar.set_ylabel("Mean Maximum Z-Score")
-        ax_bar.axhline(0, color='black', linewidth=1, linestyle='--', alpha=0.5)
+        # Get max R for this ROI
+        max_r_str = ""
+        if max_r_map and roi in max_r_map:
+            max_r_str = f" | Max r = {max_r_map[roi]:.3f}"
 
-    plt.suptitle("Session 5: Highest Delay Activation per Trial (Random vs Targeted)", fontsize=20, fontweight='bold', y=1.02)
+        # --- KDE Distribution Plot ---
+        sns.kdeplot(x=random_betas, ax=ax_dist, color='#3498db', label='Random', linewidth=2, fill=True, alpha=0.1)
+        sns.kdeplot(x=selected_betas, ax=ax_dist, color='#e74c3c', label='Targeted', linewidth=2, fill=True, alpha=0.1)
+        
+        rand_mean, sel_mean = np.mean(random_betas), np.mean(selected_betas)
+        ax_dist.axvline(rand_mean, color='#2980b9', linestyle='-', linewidth=2)
+        ax_dist.axvline(sel_mean, color='#c0392b', linestyle='-', linewidth=2)
+        
+        ax_dist.set_title(f"{roi}: Peak Delay Dist.{max_r_str}", fontsize=14, fontweight='bold')
+        ax_dist.set_xlabel("Max Z-Scored Delay")
+        ax_dist.legend(fontsize=9)
+        
+        # --- Bar Plot with SEM ---
+        rand_sem = np.std(random_betas, ddof=1) / np.sqrt(len(random_betas))
+        sel_sem = np.std(selected_betas, ddof=1) / np.sqrt(len(selected_betas))
+        
+        ax_bar.bar(x=['Random', f'Targeted\n({roi})'], height=[rand_mean, sel_mean], 
+                   yerr=[rand_sem, sel_sem], capsize=8, color=['#3498db', '#e74c3c'], alpha=0.8, edgecolor='black')
+        ax_bar.set_title(f"{roi}: Mean Peak Delay", fontsize=14, fontweight='bold')
+
+    plt.suptitle("Session 5: Highest Delay Activation (Random vs Targeted)", fontsize=20, fontweight='bold', y=1.02)
     plt.tight_layout()
     plt.savefig("./roi_beta_distributions_max.png", dpi=300, bbox_inches='tight')
 
 if __name__ == "__main__":
-    tasks_to_ignore = None
+    # --- 1. Load prediction results and find max R per ROI ---
+    results_json_path = "/mnt/store1/lucas/checkpoints/fixed/tf_medium_full_3000eps_ubt_semifixed/results/frame-only_enc+delay_delay_lsa_wfdelay_pls_nps5to50/results.json"
     
+    tasks_to_ignore = None
+
+    max_r_per_roi = {}
+    if os.path.exists(results_json_path):
+        with open(results_json_path, 'r') as f:
+            pred_data = json.load(f)
+            for roi, layers in pred_data.items():
+                # Extract all 'r' values from layers and find the maximum
+                r_values = [layer_info['r'] for layer_info in layers.values()]
+                max_r_per_roi[roi] = max(r_values)
+    
+    # --- 2. Run extraction and plotting ---
     roi_comparison_results = extract_session5_roi_betas(ignored_tasks=tasks_to_ignore)
     if roi_comparison_results:
-        plot_roi_distributions(roi_comparison_results)
+        plot_roi_distributions(roi_comparison_results, max_r_map=max_r_per_roi)
