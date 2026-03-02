@@ -1,7 +1,0 @@
-[
-   {
-     "datatype": "anat",
-     "acquisition": [null],
-     "suffix": ["T1w", "T2w", "MP2RAGE", "UNIT1", "MTS"]
-   }
-]
