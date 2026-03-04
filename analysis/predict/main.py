@@ -7,8 +7,20 @@ import nibabel as nib
 from joblib import dump, load
 
 from regression import pls_decode, pca_ridge_decode, infer
-from analysis.predict.fit import build_data, select_data, create_beta_mask, predict
+from fit import build_data, select_data, create_beta_mask, predict
 from infer import get_activations, select_acts, get_best_layer
+
+
+def _build_runwise_roi_data(runwise_data, mask):
+    roi_betas = {}
+    roi_acts = {}
+    for run_name, run_data in runwise_data.items():
+        curr_betas = run_data['betas'][:, mask]
+        if curr_betas.shape[0] == 0:
+            continue
+        roi_betas[run_name] = curr_betas
+        roi_acts[run_name] = run_data['acts']
+    return roi_betas, roi_acts
 
 def main():
     parser = argparse.ArgumentParser(description="fMRI Decoding")
@@ -44,6 +56,8 @@ def main():
                         help="If set, standardizes betas before decoding.")
     parser.add_argument("--standardize_acts", action='store_true', 
                         help="If set, standardizes activations before decoding.")   
+    parser.add_argument("--cv_scheme", type=str, choices=['kfold', 'leave_one_run_out'], default='kfold',
+                        help="Cross-validation scheme for model selection.")
     
     # Inference arguments
     parser.add_argument("--infer", action='store_true',
@@ -92,30 +106,52 @@ def main():
         
         cache_dir = args.data_cache_dir if args.data_cache_dir else folder_path
 
-        # Load or Build Data
-        if args.load_data:
-            print(f"Loading preprocessed data from: {cache_dir}")
-            s_betas = np.load(os.path.join(cache_dir, 's_betas.npy'))
-            s_acts = np.load(os.path.join(cache_dir, 's_acts.npy'))
-            print(f"Data loaded successfully. Shapes: Betas {s_betas.shape}, Acts {s_acts.shape}")
+        runwise_data = None
 
+        # Load or Build Data
+        if args.cv_scheme == 'kfold':
+            if args.load_data:
+                print(f"Loading preprocessed data from: {cache_dir}")
+                s_betas = np.load(os.path.join(cache_dir, 's_betas.npy'))
+                s_acts = np.load(os.path.join(cache_dir, 's_acts.npy'))
+                print(f"Data loaded successfully. Shapes: Betas {s_betas.shape}, Acts {s_acts.shape}")
+
+            else:
+                print(f"Processing Subject: {args.subj}")
+                print(f"Sessions: {args.sessions}")
+
+                betas, acts = build_data(args.behav_dir, args.betas_dir, args.acts_dir, args.subj, args.sessions, events_type=args.events_type)
+                s_betas, s_acts = select_data(
+                    betas, acts,
+                    phase2predict=args.phase2predict,
+                    save_per_run=args.save_per_run,
+                    cache_dir=cache_dir
+                )
+
+                if args.save_data:
+                    os.makedirs(cache_dir, exist_ok=True)
+                    print(f"Saving processed data to: {cache_dir}")
+                    np.save(os.path.join(cache_dir, 's_betas.npy'), s_betas)
+                    np.save(os.path.join(cache_dir, 's_acts.npy'), s_acts)
         else:
+            if args.load_data:
+                raise ValueError("--load_data is only supported with --cv_scheme kfold. For leave_one_run_out, rebuild from raw data to preserve run boundaries.")
+
             print(f"Processing Subject: {args.subj}")
             print(f"Sessions: {args.sessions}")
-            
+
             betas, acts = build_data(args.behav_dir, args.betas_dir, args.acts_dir, args.subj, args.sessions, events_type=args.events_type)
-            s_betas, s_acts = select_data(
-                betas, acts, 
-                phase2predict=args.phase2predict, 
-                save_per_run=args.save_per_run, 
-                cache_dir=cache_dir
+            runwise_data = select_data(
+                betas,
+                acts,
+                phase2predict=args.phase2predict,
+                save_per_run=args.save_per_run,
+                cache_dir=cache_dir,
+                return_runwise=True
             )
-            
-            if args.save_data:
-                os.makedirs(cache_dir, exist_ok=True)
-                print(f"Saving processed data to: {cache_dir}")
-                np.save(os.path.join(cache_dir, 's_betas.npy'), s_betas)
-                np.save(os.path.join(cache_dir, 's_acts.npy'), s_acts)
+
+            if len(runwise_data) < 2:
+                raise ValueError("leave_one_run_out requires at least 2 valid runs/tasks after selection.")
 
         # Run ROI Decoding
         rois = ast.literal_eval(args.rois)
@@ -135,17 +171,24 @@ def main():
             if mask.sum() == 0:
                 continue    
             
-            curr_betas = s_betas[:, mask]
+            if args.cv_scheme == 'leave_one_run_out':
+                curr_betas, curr_acts = _build_runwise_roi_data(runwise_data, mask)
+                if len(curr_betas) < 2:
+                    print(f"Skipping {roi}: fewer than 2 valid runs/tasks after ROI masking.")
+                    continue
+            else:
+                curr_betas = s_betas[:, mask]
+                curr_acts = s_acts
             
             if args.model_type == 'pls':
                 pls_n_pcs = [float(a) for a in ast.literal_eval(args.pls_n_pcs)]
                 res = predict(
-                    curr_betas, s_acts, 
+                    curr_betas, curr_acts,
                     model=pls_decode, 
                     avg_vertices=True, 
                     standardize_acts=args.standardize_acts,
                     standardize_betas=args.standardize_betas,
-                    n_pcs=pls_n_pcs
+                    n_components_list=pls_n_pcs
                 )
                 result, _, regressor, scalar, curr_betas_, curr_betas_scalar = res
                 modules[roi] = (regressor, scalar)
@@ -153,7 +196,7 @@ def main():
             elif args.model_type == 'pca_ridge':
                 ridge_alphas = [float(a) for a in ast.literal_eval(args.ridge_alphas)]
                 res = predict(
-                    curr_betas, s_acts, 
+                    curr_betas, curr_acts,
                     model=pca_ridge_decode, 
                     avg_vertices=True, 
                     standardize_acts=args.standardize_acts,

@@ -126,9 +126,10 @@ def build_data(behav_dir, betas_dir, acts_dir, subj, sessions, events_type='base
     
     return betas, acts
 
-def select_data(betas, acts, phase2predict='encoding', save_per_run=False, cache_dir=None):
+def select_data(betas, acts, phase2predict='encoding', save_per_run=False, cache_dir=None, return_runwise=False):
     stacked_s_betas = []
     stacked_s_acts = []
+    runwise_data = {}
     
     if save_per_run and cache_dir:
         os.makedirs(cache_dir, exist_ok=True)
@@ -182,11 +183,19 @@ def select_data(betas, acts, phase2predict='encoding', save_per_run=False, cache
             np.save(a_path, run_acts_stack)
             print(f"Saved per-run cache: {run_name}")
 
+        runwise_data[run_name] = {
+            'betas': run_betas_stack,
+            'acts': run_acts_stack
+        }
+
         stacked_s_betas.append(run_betas_stack)
         stacked_s_acts.append(run_acts_stack)
 
     if not stacked_s_betas:
         raise ValueError("No data found after selection process.")
+
+    if return_runwise:
+        return runwise_data
 
     s_betas = np.concatenate(stacked_s_betas, axis=0)
     s_acts = np.concatenate(stacked_s_acts, axis=1)
