@@ -7,7 +7,7 @@ import nibabel as nib
 from joblib import dump, load
 
 from regression import pls_decode, pca_ridge_decode, infer
-from analysis.predict.fit import build_data, select_data, create_beta_mask, predict
+from fit import build_data, select_data, create_beta_mask, predict
 from infer import get_activations, select_acts, get_best_layer
 
 def main():
