@@ -67,8 +67,8 @@ BETA_RE = re.compile(
         # LSS
         lss-(?P<lss_kind>EncTarget|DelayTarget)_(?P<eid_lss>Enc\d{4}|Del\d{4})_events_beta-target
       |
-        # LSA
-        lsa_(?P<lsa_stub>.+)_(?P<lsa_phase>Enc|Del)_(?P<eid_lsa>Enc\d{4}|Del\d{4})_beta
+        # LSA / GLMsingle (same filename layout)
+        (?:lsa|glmsingle[BC]?)_(?P<lsa_stub>.+)_(?P<lsa_phase>Enc|Del)_(?P<eid_lsa>Enc\d{4}|Del\d{4})_beta
     )
     \.dscalar\.nii$
     """,
@@ -187,11 +187,12 @@ def find_block_log_for_run(block_logs_dir: str, task: str, acq: str, run: str):
 
 # ----------------------------
 # Collect per-session: key -> (roi_vec, feat)
-# KEY IS BASED ON tc + pos (+ task/acq/run/phase) TO ALIGN REPEATS ACROSS SESSIONS
+# KEY IS BASED ON tc + pos (+ task/acq/phase) TO ALIGN REPEATS ACROSS SESSIONS (not run: see below)
 # ----------------------------
 def collect_one_session_dict(
     glm_base_dir: str,
     behav_base: str,
+    events_subdir: str,     # e.g. "events_wfdelay" — must match the GLM variant
     block_logs_dir: str,
     sub: str,
     session: str,
@@ -226,7 +227,7 @@ def collect_one_session_dict(
         task, acq, run = parsed
 
         glm_task_dir = os.path.join(ses_dir, taskdir)
-        behav_events_dir = os.path.join(behav_base, sub, session, "events")
+        behav_events_dir = os.path.join(behav_base, sub, session, events_subdir)
         base_events_tsv = os.path.join(behav_events_dir, behav_baseevents_name(task, acq, run))
         if not os.path.isfile(base_events_tsv):
             if verbose:
@@ -303,13 +304,14 @@ def collect_one_session_dict(
             if roi_vec.shape[0] != n_roi:
                 raise ValueError(f"ROI vec length mismatch for {bname}: got {roi_vec.shape[0]} expected {n_roi}")
 
-            # NEW KEY: stable across sessions even if event_id order changes
-            key = (task, acq, run, phase_to_decode, int(pos), tc_key)
+            # NEW KEY: stable across sessions even if event_id order changes.
+            # Run is deliberately NOT part of it ("*" slot keeps the tuple shape): ctxdm trials swap between
+            # run-01 and run-02 across sessions, and tc is unique within a task variant per session.
+            key = (task, acq, "*", phase_to_decode, int(pos), tc_key)
 
             if key in out:
-                if verbose:
-                    print(f"[WARN] Duplicate key in session {session}: {key} (file={bname}) — keeping first")
-                continue
+                raise RuntimeError(f"Duplicate key in session {session}: {key} (file={bname}); "
+                                   "tc is no longer unique within this task variant, so run must be part of the key")
 
             out[key] = (roi_vec, feat_val)
 
@@ -342,6 +344,7 @@ def collect_one_session_dict(
 def collect_repeat_averaged_across_sessions(
     glm_base_dir: str,
     behav_base: str,
+    events_subdir: str,     # e.g. "events_wfdelay" — must match the GLM variant
     block_logs_base: str,   # base dir: .../behav/sub-01 (contains ses-01, ses-02, ...)
     sub: str,
     sessions: list[str],
@@ -353,7 +356,7 @@ def collect_repeat_averaged_across_sessions(
     verbose: bool = False,
 ):
     """
-    Returns repeat-averaged patterns across sessions, aligned by (task, acq, run, phase, pos, tc).
+    Returns repeat-averaged patterns across sessions, aligned by (task, acq, phase, pos, tc) — not run.
 
     Output:
       X_avg : (n_common_events, n_vertices)
@@ -370,6 +373,7 @@ def collect_repeat_averaged_across_sessions(
         d, meta, roi_label_local = collect_one_session_dict(
             glm_base_dir=glm_base_dir,
             behav_base=behav_base,
+            events_subdir=events_subdir,
             block_logs_dir=block_logs_dir,
             sub=sub,
             session=ses,
@@ -395,7 +399,7 @@ def collect_repeat_averaged_across_sessions(
     if not common_keys:
         raise RuntimeError(
             "No common event keys across sessions.\n"
-            "Since we align using (task,acq,run,phase,pos,tc), this usually means:\n"
+            "Since we align using (task,acq,phase,pos,tc), this usually means:\n"
             "  - tc differs across sessions (format mismatch), OR\n"
             "  - some sessions are missing blocks/GLM outputs, OR\n"
             "  - block log finder mismatched the run/block file.\n"
@@ -453,45 +457,158 @@ def collect_repeat_averaged_across_sessions(
 
 
 # ----------------------------
-# Ridge decoding (5-fold CV)
+# Ridge decoding (5-fold CV, grouped by trial, optional permutation null)
 # ----------------------------
-def ridge_decode_5fold(X: np.ndarray, y: np.ndarray, alpha: float = 1.0, random_state: int = 0):
+def trial_groups(meta_avg: pd.DataFrame) -> np.ndarray:
+    """One group per trial: all positions of a trial share context and must stay in the same fold."""
+    return meta_avg[["task", "acq", "run", "tc"]].astype(str).agg("|".join, axis=1).to_numpy()
+
+
+def task_pos_cells(meta_avg: pd.DataFrame) -> np.ndarray:
+    """One nuisance cell per task variant x sequence position (e.g. 1back|loc|3)."""
+    return meta_avg[["task", "acq", "pos"]].astype(str).agg("|".join, axis=1).to_numpy()
+
+
+def remove_cell_means(Xtr, Xte, cells_tr, cells_te):
+    """Subtract each nuisance cell's mean pattern, estimated from training events only."""
+    Xtr, Xte = Xtr.copy(), Xte.copy()
+    fallback = Xtr.mean(axis=0)
+    for c in np.unique(np.concatenate([cells_tr, cells_te])):
+        in_tr, in_te = cells_tr == c, cells_te == c
+        m = Xtr[in_tr].mean(axis=0) if in_tr.any() else fallback
+        Xtr[in_tr] -= m
+        Xte[in_te] -= m
+    return Xtr, Xte
+
+
+def ridge_decode_5fold(
+    X: np.ndarray,
+    y: np.ndarray,
+    groups: np.ndarray | None = None,
+    alpha: float = 1.0,
+    alphas: np.ndarray | None = None,
+    nuisance: np.ndarray | None = None,
+    n_perm: int = 0,
+    random_state: int = 0,
+):
+    """
+    alphas:   if given, alpha is chosen per outer fold by inner 5-fold (grouped) CV on the training set,
+              and re-chosen for every permutation so the null includes the tuning step.
+    nuisance: per-event cell labels (e.g. task x position); each cell's training mean pattern is removed
+              from train and test events before scaling.
+    """
     X = np.asarray(X, dtype=np.float64)
     y = np.asarray(y)
 
     vals, counts = np.unique(y, return_counts=True)
     print("Class counts:", list(zip(vals, counts)))
     print("majority-class baseline:", counts.max() / counts.sum())
+    print("balanced-acc chance:", 1 / len(vals))
 
-    from sklearn.model_selection import StratifiedKFold
+    from sklearn.model_selection import StratifiedKFold, StratifiedGroupKFold
     from sklearn.preprocessing import LabelEncoder, StandardScaler
-    from sklearn.linear_model import RidgeClassifier
 
     le = LabelEncoder()
     y_enc = le.fit_transform(y)
+    n_classes = len(vals)
 
-    skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=random_state)
-    fold_accs = []
+    def make_cv():
+        if groups is None:
+            return StratifiedKFold(n_splits=5, shuffle=True, random_state=random_state)
+        return StratifiedGroupKFold(n_splits=5, shuffle=True, random_state=random_state)
 
-    for fold, (tr, te) in enumerate(skf.split(X, y_enc), start=1):
+    if groups is not None:
+        print(f"Grouped CV: {len(np.unique(groups))} groups")
+
+    # Same model as sklearn's RidgeClassifier (±1 targets, intercept), in kernel form. Ridge is linear
+    # in its targets: with K = Xtr Xtr^T = U diag(ev) U^T, the test scores for any alpha are
+    # (Xte Xtr^T U) diag(1 / (ev + alpha)) U^T (Y - mean(Y)) + mean(Y). The eigendecomposition depends
+    # only on X, so each permutation (and each candidate alpha) is a few matrix products, not a refit.
+    def kernel_parts(Xa, Xb):
+        mu = Xa.mean(axis=0)  # ridge intercept = centre on the training mean
+        Xa, Xb = Xa - mu, Xb - mu
+        ev, U = np.linalg.eigh(Xa @ Xa.T)
+        return (Xb @ Xa.T) @ U, ev, U
+
+    folds = []
+    for tr, te in make_cv().split(X, y_enc, groups):
         Xtr, Xte = X[tr], X[te]
-        ytr, yte = y_enc[tr], y_enc[te]
-
+        if nuisance is not None:
+            Xtr, Xte = remove_cell_means(Xtr, Xte, nuisance[tr], nuisance[te])
         scaler = StandardScaler(with_mean=True, with_std=True)
         Xtr = scaler.fit_transform(Xtr)
         Xte = scaler.transform(Xte)
 
-        clf = RidgeClassifier(alpha=alpha)
-        clf.fit(Xtr, ytr)
-        yhat = clf.predict(Xte)
+        inner = []
+        if alphas is not None:
+            g_tr = None if groups is None else groups[tr]
+            for itr, ite in make_cv().split(Xtr, y_enc[tr], g_tr):
+                inner.append((itr, ite, kernel_parts(Xtr[itr], Xtr[ite])))
+        folds.append((tr, te, kernel_parts(Xtr, Xte), inner))
 
-        acc = float((yhat == yte).mean())
-        fold_accs.append(acc)
-        print(f"[fold {fold}/5] acc={acc:.4f} (n_test={len(te)})")
+    def centred_targets(ytr):
+        if n_classes == 2:
+            Y = np.where(ytr == 1, 1.0, -1.0)[:, None]
+        else:
+            Y = np.where(ytr[:, None] == np.arange(n_classes), 1.0, -1.0)
+        ybar = Y.mean(axis=0)
+        return Y - ybar, ybar
+
+    def decide(S):
+        return (S[:, 0] > 0).astype(int) if n_classes == 2 else S.argmax(axis=1)
+
+    def balanced_acc(yt, yp):
+        return float(np.mean([(yp[yt == c] == c).mean() for c in np.unique(yt)]))
+
+    def ridge_predict(parts, ytr, a):
+        A, ev, U = parts
+        Yc, ybar = centred_targets(ytr)
+        return decide(A @ ((U.T @ Yc) / (ev + a)[:, None]) + ybar)
+
+    def choose_alpha(inner, ytr):
+        """Inner-CV squared error on the ±1 targets (ridge's own loss; smoother than accuracy)."""
+        if alphas is None:
+            return alpha
+        sse = np.zeros(len(alphas))
+        for itr, ite, (A, ev, U) in inner:
+            Yc, ybar = centred_targets(ytr[itr])
+            Yte, _ = centred_targets(ytr[ite])
+            Yte = Yte + centred_targets(ytr[ite])[1]  # uncentred ±1 targets of the inner test set
+            UtY = U.T @ Yc
+            for k, a in enumerate(alphas):
+                sse[k] += float(((A @ (UtY / (ev + a)[:, None]) + ybar - Yte) ** 2).sum())
+        return float(alphas[len(alphas) - 1 - np.argmin(sse[::-1])])  # ties -> stronger penalty
+
+    def cv_scores(labels):
+        """Per-fold (accuracy, balanced accuracy, chosen alpha)."""
+        scores = []
+        for tr, te, parts, inner in folds:
+            a = choose_alpha(inner, labels[tr])
+            yhat = ridge_predict(parts, labels[tr], a)
+            scores.append((float((yhat == labels[te]).mean()), balanced_acc(labels[te], yhat), a))
+        return np.array(scores)
+
+    scores = cv_scores(y_enc)
+    fold_accs, fold_baccs, fold_alphas = scores[:, 0].tolist(), scores[:, 1].tolist(), scores[:, 2].tolist()
+    for fold, ((_, te, _, _), acc, bacc, a) in enumerate(zip(folds, fold_accs, fold_baccs, fold_alphas), start=1):
+        print(f"[fold {fold}/5] acc={acc:.4f} bacc={bacc:.4f} alpha={a:g} (n_test={len(te)})")
 
     mean_acc = float(np.mean(fold_accs))
-    print(f"[DONE] mean CV acc={mean_acc:.4f}  folds={['%.3f' % a for a in fold_accs]}")
-    return {"mean_acc": mean_acc, "fold_accs": fold_accs, "label_encoder": le}
+    mean_bacc = float(np.mean(fold_baccs))
+    print(f"[DONE] mean CV acc={mean_acc:.4f}  bacc={mean_bacc:.4f}  folds(bacc)={['%.3f' % a for a in fold_baccs]}")
+    res = {"mean_acc": mean_acc, "fold_accs": fold_accs,
+           "mean_bacc": mean_bacc, "fold_baccs": fold_baccs, "fold_alphas": fold_alphas,
+           "chance": 1 / len(vals), "label_encoder": le}
+
+    if n_perm > 0:
+        # null on balanced accuracy, same folds (alpha re-tuned per permutation when alphas is given)
+        rng = np.random.default_rng(random_state)
+        null = np.array([cv_scores(rng.permutation(y_enc))[:, 1].mean() for _ in range(n_perm)])
+        p = (1 + np.sum(null >= mean_bacc)) / (n_perm + 1)
+        print(f"[PERM] bacc null mean={null.mean():.4f}  95th pct={np.percentile(null, 95):.4f}  p={p:.4g} (n_perm={n_perm})")
+        res.update({"null_baccs": null, "p_value": float(p)})
+
+    return res
 
 
 # ----------------------------
@@ -501,8 +618,11 @@ if __name__ == "__main__":
     sub = "sub-01"
     sessions = ["ses-01", "ses-02", "ses-03", "ses-04"]
 
-    glm_base_dir = "/mnt/tempdata/lucas/fmri/recordings/TR/neural/fmriprep_outs/first_run/glm_runs/lsa/64kDense"
+    glm_variant = "wfdelay"   # or "wofdelay" — selects both the GLM outputs and the matching events folder
+
+    glm_base_dir = f"/mnt/tempdata/lucas/fmri/recordings/TR/neural/fmriprep_outs/first_run/glm_runs/lsa_{glm_variant}/64kDense"
     behav_base   = "/mnt/tempdata/lucas/fmri/recordings/TR/behav"
+    events_subdir = f"events_{glm_variant}"
     block_logs_base = f"/mnt/tempdata/lucas/fmri/recordings/TR/behav/{sub}"  # contains ses-01/, ses-02/, ...
 
     dlabel = "/home/lucas/projects/MULTFSCTRL/prep/fmriprep/Glasser_LR_Dense64k.dlabel.nii"
@@ -514,12 +634,13 @@ if __name__ == "__main__":
     X, y, meta_avg, meta_per_ses = collect_repeat_averaged_across_sessions(
         glm_base_dir=glm_base_dir,
         behav_base=behav_base,
+        events_subdir=events_subdir,
         block_logs_base=block_logs_base,
         sub=sub,
         sessions=sessions,
         dlabel_path=dlabel,
         roi_names=roi_names,
-        feature_to_decode="ctg",       # or "ctg"
+        feature_to_decode="ctg",       # or "loc" / "obj"
         phase_to_decode="Encoding",    # or "Delay"
         only_tasks_regex=None,         # e.g. "1back"
         verbose=True,
@@ -528,5 +649,7 @@ if __name__ == "__main__":
     print("Repeat-averaged X:", X.shape, "(n_events_common, n_vertices)")
     print("Repeat-averaged y:", y.shape)
 
-    res = ridge_decode_5fold(X, y, alpha=1.0, random_state=0)
+    res = ridge_decode_5fold(X, y, groups=trial_groups(meta_avg), alpha=1.0, n_perm=1000, random_state=0)
     print("Mean decoding accuracy:", res["mean_acc"])
+    print("Mean balanced accuracy:", res["mean_bacc"])
+    print("Permutation p-value:", res["p_value"])
