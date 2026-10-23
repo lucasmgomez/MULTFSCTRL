@@ -34,7 +34,7 @@ The user's original instructions, which still apply:
 | Glasser-64k dtseries + confounds (all 560 runs) | `.../data/glasser_resampled/<sub>/<ses>/` | `.../fmri_dataset_project/data/glasser_resampled/` |
 | BIDS + fMRIPrep 20.2.6 | `/mnt/store1/lucas/cneuromod_multfs_bids/sub-XX.tar` (5 × ~120 GB uncompressed tars + `metadata.tar`) | `/project/def-pbellec/xuan/cneuromod.multfs.fmriprep` (datalad; raw BIDS under `sourcedata/cneuromod.multfs.raw`) |
 | Reformatted behaviour (**not needed**) | `.../data/reformated_behavior/` | – |
-| TR reference data | `/mnt/tempdata/lucas/fmri/recordings/TR` | **not on the cluster** (see **TR checks**) |
+| TR reference data | `/mnt/tempdata/lucas/fmri/recordings/TR` | Rorqual: `/home/lucasg/links/projects/ctb-bashivan/lucasg/trevor_ctrl/TR` (same layout; holds at least the files listed under **TR checks**) |
 
 What these sources contain:
 - **`behavior/`**: 560 logs (5 subjects × 16 sessions × 7 runs) in nearly TR's raw-log format:
@@ -220,8 +220,9 @@ Discussed with the user. **Confirm everything not marked "agreed" before Phase 2
 ## Running on the cluster
 - **Environment** (mirzakhani's `fmri_glm`): Python 3.11, numpy 2.4.0, scipy 1.16.3, pandas 2.3.3, scikit-learn 1.8.0, nilearn 0.12.1, nibabel 5.3.3, joblib 1.5.3, **glmsingle 1.2** (its FIR bug is monkeypatched in `glmsingle_fit.py` for exactly this version), fracridge 2.0, matplotlib 3.10.8. `wb_command` isn't needed.
 - **Jobs:** run them through SLURM, not tmux. Set `OMP_NUM_THREADS`/`MKL_NUM_THREADS`/`OPENBLAS_NUM_THREADS` to the CPUs requested, and use 1 thread per joblib worker.
-- **TR checks:** TR exists only on mirzakhani. Either run the TR checks there, or ask the user to copy (~6.3 GB),
-  keeping the same relative layout. Everything comes from `first_run`; `ctrl_run` is only used by
+- **TR checks:** TR data are copied to Rorqual at `/home/lucasg/links/projects/ctb-bashivan/lucasg/trevor_ctrl/TR`
+  (that folder also holds ~100k other files from an earlier copy). The checks need these files (12,262 files, 6.7 GB),
+  in the same relative layout. Everything comes from `first_run`; `ctrl_run` is only used by
   `runs/run_lsa_ctrl.sh` and isn't needed.
   - `TR/behav/sub-01/ses-0[1-4]` (40 MB);
   - `TR/neural/fmriprep_outs/first_run/{64kDense,confounds}/sub-01/ses-0[1-4]` (1.8 GB);
