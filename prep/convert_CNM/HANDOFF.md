@@ -12,10 +12,10 @@ the Rorqual paths were checked on 2026-10-23 (see **Rorqual verification**).
 | Phase | State |
 |---|---|
 | 1. Inventory (read-only) | **Done**, and re-run on Rorqual (2026-10-23) with identical results. Findings below; reproducible with `inventory.py`. |
-| Decisions | Partly discussed with the user (see **Decisions**). **Confirm the open ones with the user before Phase 2.** |
-| 2. Conversion | Not started. |
-| 3. Pipeline changes | Not started. |
-| 4. Fit + validate | Not started. |
+| Decisions | **All agreed** (2026-10-23, see **Decisions**). |
+| 2. Conversion | **Done** for all 5 subjects (558 runs); `check_tree.py` passes. See **Phase 2–3 results**. |
+| 3. Pipeline changes | **Done**; TR checks byte-identical. See **Phase 2–3 results**. |
+| 4. Fit + validate | Pilot (sub-01, ses-01..04, both pos-1 designs) submitted. |
 
 The user's original instructions, which still apply:
 - Never write into the TR tree or the original data; build a parallel root with symlinks/copies plus a mapping table.
@@ -130,19 +130,23 @@ On Rorqual: `--confounds_root $S/cneuromod.multfs.fmriprep`, and for `--bids_roo
 - With a stimulus key (task, phase, pos, loc, obj), sub-01 has 246 conditions and every event repeats across sessions.
 
 ## Decisions
-Discussed with the user. **Confirm everything not marked "agreed" before Phase 2.**
+All agreed with the user on 2026-10-23 (the evidence behind #3 is kept below).
 
-1. **ID and root: open.** Proposed `CNM`; the user asked what it meant and didn't confirm.
-   - On mirzakhani the plan was `/mnt/tempdata/lucas/fmri/recordings/CNM/{behav,neural}`.
-   - **On the cluster, ask where the root should live.** `$SCRATCH` is purged on Compute Canada, so it can't be the only copy of results.
-   - Keep subject labels; rename sessions to `ses-01..16` (filenames `ses-X`), as in TR.
-   - Suggest doing sub-01 end to end first, then the other four.
-2. **fMRIPrep: open.** Recommended: reuse the 20.2.6 outputs (via `glasser_resampled`) and pass `--start_time 0.686` to `glmsingle_fit.py`.
-   - 0.686 s is the mean slice time, matching TR's slice-timing reference (0.685 s). Without correction, per-vertex timing error is ≤ ±0.69 s.
-   - `--start_time` already exists and overrides the JSON lookup.
-   - A rerun with 23.2.0 would need the CNeuroMod T1w/sMRIPrep data, which isn't in the BIDS tars, and 560 runs of compute. **Rerun only with explicit approval.**
-3. **pos-1 delay (0.5 s): open; the user pushed back.** Recommendation: don't model the 0.5 s pos-1 delay, but model all 3.98 s delays including the final one (`--final_delay_duration 3.98`); one `stimdur` of 1.5 s.
-   - The user worried this "loses an important piece of each trial". Answer given: no data are removed. That signal stays in the time series and is absorbed by the encoding regressors; what's lost is a separate beta, and that beta isn't estimable.
+1. **ID and root: agreed.** ID `CNM`. Root `/home/lucasg/links/projects/ctb-bashivan/lucasg/trevor_ctrl/CNM` (next to
+   `TR`; backed-up project space). Regenerable bulk (GLMsingle raw outputs, pilots, job logs) goes to
+   `/home/lucasg/scratch/CNM`; never the only copy of results. Subject labels kept; sessions renamed `ses-01..16`
+   (filenames `ses-X`). sub-01 end to end first.
+   - The behaviour/design/dtseries source is `trevor_ctrl/fmri_dataset_project_data`, a symlink (made with the user's
+     OK) to `$S/fmri_dataset_project/data`.
+   - **Neural files are copied** into the root (not symlinked): the sources are someone else's folders on a
+     `def-bashivan` space at its file quota. `mapping.csv` records every original path.
+2. **fMRIPrep: agreed, reuse 20.2.6** with `--start_time 0.686`. A 23.2.0 rerun is blocked until the CNeuroMod
+   anatomy is available: the user may ask for read access to `cneuromod.anat.smriprep` (sMRIPrep + FreeSurfer
+   subjects, the anatomy 20.2.6 used), or failing that the raw `cneuromod.anat` T1w. Never launch fMRIPrep without approval.
+3. **pos-1 delay: agreed.** Don't model the 0.5 s pos-1 delay (`create_events_lsa.py --min_delay_s 1.0`); model all
+   3.98 s delays including the final one (`--final_delay_duration 3.98`); one `stimdur` of 1.5 s. dms's pos-1 delay
+   is 3.98 s and is kept. Run the comparison pilot (sub-01, 4 sessions, both designs; `events_wfdelaypos1` keeps the
+   pos-1 delays) and report it.
    - Evidence from `vif_check.py` (median VIF, canonical HRF):
 
      | | Delay pos 1 | Encoding pos 2 | Encoding pos 1 |
@@ -152,20 +156,61 @@ Discussed with the user. **Confirm everything not marked "agreed" before Phase 2
      | TR 1back as modelled | 64 | 75 | 28 |
 
      interdms is the same: 1,785 / 1,770 when modelled.
-   - Keeping the regressor also ruins the stim-2 encoding beta. TR's pos-1 delay therefore has no CNM counterpart; compare datasets on encoding betas and delays from pos 2 onward.
-   - Offered but not done: fit sub-01 type B both ways on a few sessions and compare how reproducible the stim-2 encoding betas are across repeats, plus `temporal_leakage.py`. **Ask the user whether they want this before deciding.**
-   - Optional extra: a "late delay" event at delay onset + 2 s.
-4. **GLMsingle condition key: agreed in direction.** The user suggested choosing the noise components and ridge fraction only on the data that have repeats. That is GLMsingle's default with TR's key: `glmsingle/ssq/calcbadness.py` skips any held-out trial whose condition isn't in the training folds, while every event stays in the model and gets a beta. Plan:
-   - Keep TR's key and fit B, C and D. **Don't drop singletons from the design**: their responses would leak into neighbouring betas and residuals, and type C would treat them as noise.
-   - Dry run: report how many trials per task actually count toward tuning (sub-01: none from 1back, few from interdms).
-   - Check D with `temporal_leakage.py`, focusing on 1back and pos-1/pos-2 pairs. D's tuning comes from dms and ctxdm, whose event spacing differs from 1back's.
-   - Fallback if D blends heavily: tune on the stimulus key (`--cond_key stimulus`, still to write).
-   - **Open:** a `--n_folds` argument grouping the 16 sessions into e.g. 4 folds, to cut runtime. Default stays one fold per session.
-5. **Repeats in evaluation: open.** Proposed:
-   - decode single-trial betas (no averaging, minimum repeats 1);
-   - reliability by splitting each condition's repeats in half, plus a stimulus-key reliability, because TR-key repeats are almost only dms/ctxdm.
-6. **dms: open.** Proposed: include it in the GLM fit (its 16×16 repeats help tuning), exclude it from feature decoding by default.
-7. **Data problems: open.** Proposed handling is in the table above.
+   - No data are removed: that signal stays in the time series and is absorbed by the encoding regressors; what's
+     lost is a separate beta, which isn't estimable. TR's pos-1 delay therefore has no CNM counterpart; compare
+     datasets on encoding betas and delays from pos 2 onward.
+4. **GLMsingle condition key: agreed.** Keep TR's key (task, acq, phase, pos, tc); every event stays in the model
+   (GLMsingle's `calcbadness` already ignores held-out trials whose condition isn't in the training folds). Fit B, C, D;
+   write C's betas only if GLMdenoise selects > 0 PCs (for TR C = B). Check D with `temporal_leakage.py`; fallback
+   if D blends heavily: tune on a stimulus key (`--cond_key`, not written).
+   - `--n_folds`: default one fold per session; measure runtime first and use fewer (interleaved) folds only if
+     the full fit doesn't fit the walltime.
+5. **Repeats in evaluation: agreed.** Decode single-trial betas (`--repeat_mode single`, minimum repeats 1;
+   grouped CV keeps all repeats of a trial in one fold). Reliability: half-splits of each condition's repeats
+   (`pattern_reliability.py --split_mode repeats`), with the TR key and with a stimulus key.
+6. **dms: agreed.** In the GLM fit; out of feature decoding (`--exclude_tasks dms`).
+7. **Data problems: agreed** as in the table above (sub-06 ses-007 relabelled; sub-05 ses-012's 2 stub runs dropped;
+   sub-05 ses-002 kept with no responses; low-accuracy runs kept and reported).
+
+## Phase 2–3 results (2026-10-23)
+**Tree** (`CNM=/home/lucasg/links/projects/ctb-bashivan/lucasg/trevor_ctrl/CNM`, TR's layout):
+- `mapping.csv` (copy in the repo): one row per original run, with original log, design block, final acq, new
+  session/run, include flag, notes, acq_time and every source -> destination path.
+- `behav/<sub>/ses-XX/`: TR-format block logs + `_scored.tsv` + `events_wfdelay/` (sub-01 also `events_wfdelaypos1/`).
+- `neural/fmriprep_outs/fmriprep_20.2.6/{64kDense,confounds,derivatives,bids}/`: **copies** (24 GB) of the Glasser-64k
+  dtseries, confounds, fMRIPrep 91k sidecars (no `StartTime`; pass `--start_time 0.686`) and raw BOLD sidecars.
+- `sourcedata/scans/`: the 80 `scans.tsv` extracted from the BIDS tars (source of the dates/times in the log names).
+- Scratch for regenerable outputs: `/home/lucasg/scratch/CNM` (`logs/`, `dry/`, `pilot/`).
+- Steps: `sbatch slurm_build_tree.sh` (9.5 min) -> `sbatch slurm_make_events.sh` (2 min) -> `check_tree.py`.
+
+**Checks** (`check_tree.py`, all 558 runs): logs keep every trial, timing and feature; tc decodes to loc/obj;
+ctg == obj // 2; copies byte-identical; volumes = confound rows; base events as planned (no delay < 1 s; dms keeps its 3.98 s pos-1 delay; final delays 3.98 s). Scored `expected_ans` = iWISDM `action` everywhere
+except sub-06 ses-07 interdms loc_ABBA/loc_ABAB run-01 (expected: `action` follows the planned labels there).
+
+**Block-log format:** loc/ref/obj/ctg/ang per position (from `locmod/objmod/ctgmod/angmod`; the 1back/ctxdm `loc{p}`
+columns equal `locmod{p}`); dms: `loc{p}`, `objmod{p}`, empty ctg/ang. `tc` written as in TR (float). Responses
+x -> 2, b -> 3, `--` -> empty (see CLAUDE.md -> Scored log for why not `--`). Other original columns are kept.
+
+**sub-01 dry run** (16 sessions, `events_wfdelay`): 112 runs, 11,184 trials, 9,320 conditions (as in the repeat
+table), max onset error 0.224 s, no shared frames. Trials that can inform tuning: 2,653 with 16 folds (1back 0,
+interdms 224, ctxdm 1,405, dms 1,024), 2,575 with 8, 2,409 with 4.
+
+**Code changes** (all defaults keep TR; see CLAUDE.md -> TR assumptions): `score_responses.py` (dms),
+`create_events_lsa.py --min_delay_s`, `glmsingle_fit.py --n_folds/--raw_dir` + tuning report + free
+`--events_variant`, `feature.py` repeat modes / `exclude_tasks`, `--root/--prep_run/--repeat_mode/...` in the sweep,
+leakage and reliability scripts, `pattern_reliability.py --split_mode repeats`.
+
+**TR checks on Rorqual** (TR folder above; scripts in the session scratchpad, rerun as described here):
+- `glmsingle_fit.py --dry_run` manifest is byte-identical to the saved one (before and after the changes).
+- Baseline = unchanged scripts with only the root string swapped: the small decoding run (loc/obj, DLPFC/EVC group,
+  demean+tuned, 1000 perms) and `temporal_leakage.py` are byte-identical to the saved TSVs;
+  `pattern_reliability.py` differs from the saved TSV by ≤ 2e-16 (numpy/BLAS). The new code reproduces this
+  baseline byte for byte for all three.
+- The saved `..._cfg-demeantuned.tsv` (09:40, 456 events) is stale: it doesn't match the current betas; the
+  10:47 TSVs (504 events) do.
+- New modes on TR: `--repeat_mode average --min_repeats 4` is byte-identical to the default; repeat-split
+  reliability with the trial key matches the 2-vs-2 session split closely (e.g. EVC encoding r 0.245 vs 0.246).
+  Single-trial TR decoding (reference for CNM): EVC loc encoding 0.975 (0.996 averaged), obj 0.615 (0.688).
 
 ## Phase 2 plan: conversion (`prep/convert_CNM/`)
 1. **`build_tree.py`** writes the mapping table and the tree. One row per run, with columns:

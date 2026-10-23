@@ -7,7 +7,9 @@ State as of 2026-10-22. Branch `ctrl`. The reference subject's data root is
 `/mnt/tempdata/lucas/fmri/recordings/TR` ("subject TR", BIDS label `sub-01`). To bring another
 subject or dataset into this pipeline, see **Converting another dataset to the TR layout** at the end.
 A conversion of the CNeuroMod multfs dataset ("CNM", 5 subjects) is in progress on branch
-`cnm-conversion`: read `prep/convert_CNM/HANDOFF.md` for its state, findings and open decisions.
+`cnm-conversion`, on the Compute Canada cluster Rorqual: read `prep/convert_CNM/HANDOFF.md` for its state,
+findings and decisions. On Rorqual, TR is at `/home/lucasg/links/projects/ctb-bashivan/lucasg/trevor_ctrl/TR` and
+CNM at `.../trevor_ctrl/CNM` (same layout as TR).
 
 ## Repo copies
 - This checkout: `/home/lucas/projects/trash/MULTFSCTRL`. The GLMsingle and decoding work lives here
@@ -25,6 +27,8 @@ A conversion of the CNeuroMod multfs dataset ("CNM", 5 subjects) is in progress 
   (`OMP_NUM_THREADS` etc.), and use 1 thread per worker inside joblib sweeps.
 - Run long jobs in tmux (`runs/*.sh` spawn tmux windows) or with `setsid nohup`, so they survive the
   session ending.
+- Rorqual: `~/envs/fmri_glm/bin/python` (same packages; numpy 2.4.2, scipy 1.16.2). Run jobs through SLURM
+  (account `def-bashivan_cpu`) with BLAS threads = CPUs requested; launchers are in `prep/convert_CNM/slurm_*.sh`.
 
 ## Layout
 ```
@@ -217,14 +221,21 @@ neural/fmriprep_outs/<prep_run>/
   - TR's raw logs start with a UTF-8 BOM; the scored copies are read as plain TSV.
 - **Scored log** (`prep/behav/score_responses.py <dir>`):
   - Adds `expected_ans{k}`, `ans{k}`, `ans{k}_comp`, `trial_correct` (2 = match, 3 = non-match).
-  - Its filename regex only knows `interdms|ctxdm|1back`, with specs `{ctg,obj,loc}_{ABAB,ABBA}`,
-    `col|lco` and `{ctg,obj,loc}`. Variants need `score_responses_ctrl.py` or an extension.
+  - Its filename regex knows `interdms|ctxdm|1back|dms`, with specs `{ctg,obj,loc}_{ABAB,ABBA}`,
+    `col|lco` and `{ctg,obj,loc}` (1back, dms). `dms` = match of stimulus 2 vs 1 on one feature, response
+    `response_1` (CNM; TR's session-5 dms is a different task, see `score_responses_ctrl.py`).
+  - Pass it a glob of the raw logs (`"<dir>/*_events_??-??-??.tsv"`): given a folder it also re-scores
+    existing `_scored.tsv` files.
+  - Caveat: 1back compares `resp == expected`; a `--` anywhere in a response column makes the column strings,
+    so that column's `ans` are all False (3 such misses in TR). `expected_ans` is unaffected. CNM logs write
+    missing responses as empty cells.
 - **Base events** (`analysis/glm/create_events_lsa.py -i behav/<sub>/<ses> -o .../events_wfdelay`):
   - Columns `onset, duration, trial_type, trial (TrialNN, by sorted TrialNumber), pos (1-based), phase (Encoding|Delay), event_id (Enc0001/Del0001, chronological per phase)`.
   - Encoding = stimulus onset→offset.
   - Delay = offset → next stimulus onset.
-  - The final delay of each trial has a **fixed** `--final_delay_duration` (3.48 s for TR); that
-    delay is left out for `wofdelay`.
+  - The final delay of each trial has a **fixed** `--final_delay_duration` (3.48 s for TR; 3.98 s for CNM). The
+    current script always writes it: TR's `events_wofdelay` was made by the version before commit `f0ed9a5`.
+  - `--min_delay_s` (default 0) drops within-trial delays shorter than that (CNM: 1.0, see HANDOFF.md #3).
   - It globs every `*.tsv` in the input folder, so raw and scored logs both get processed.
 - **dtseries**: 64,984 surface vertices (Glasser 64k template = fsLR 32k × 2, no subcortex). Made from
   fMRIPrep's 91k output by `prep/fmriprep/cifti_resample.sh` (`wb_command -cifti-resample …
@@ -249,8 +260,8 @@ neural/fmriprep_outs/<prep_run>/
    `confounds.sh`. These scripts hard-code `ctrl_run` paths and the session range, so edit or
    parametrize them.
 3. Behaviour: put the raw logs in `behav/<sub>/<ses>/` with TR-style names, run `score_responses.py`,
-   then run `create_events_lsa.py` (once with `-o events_wfdelay`; for `wofdelay` rerun with that
-   output, which drops final delays).
+   then run `create_events_lsa.py -o events_wfdelay` (CNM: `prep/convert_CNM/build_tree.py` and
+   `slurm_make_events.sh`, validated by `check_tree.py`).
 4. GLM:
    - `python analysis/glm/glmsingle_fit.py --sub <sub> --sessions ... --neural_base <root>/neural/fmriprep_outs/<prep_run> --behav_base <root>/behav --events_variant wfdelay --add_fd --dry_run`
      first. Check the printed run, condition and repeat counts and the max onset error, and that no
@@ -262,18 +273,23 @@ neural/fmriprep_outs/<prep_run>/
    - Positive control: EVC location decoding during encoding should be near 1.0. If it isn't, timing,
      alignment or labels are wrong.
 
-### Hard-coded TR assumptions to fix or parametrize
-- Root `/mnt/tempdata/lucas/fmri/recordings/TR` is hard-coded in `feature_roi_sweep.py`,
-  `pattern_reliability.py` and `temporal_leakage.py`, and is the default in `glmsingle_fit.py`
-  (overridable via `--neural_base/--behav_base`). Defaults are `sub-01` and `ses-01..04`.
-- `feature.collect_repeat_averaged_across_sessions` keeps only events present in **every** session.
-  With variable repeats this will drop data; change it to average the available repeats, with a
-  minimum count.
-- `pattern_reliability.py` requires exactly 4 sessions (`--sessions nargs=4`, fixed 2-vs-2 `SPLITS`).
-  Generalise it to split repeats in half per condition.
-- `temporal_leakage.py` has `N_POS = {1back: 6, interdms: 4, ctxdm: 3}` and assumes TR's tc digit
-  layout. `misc/beta_*.py` have similar `tc_format` length maps.
-- `glmsingle_fit.py`:
+### TR assumptions in the code, and the options that now relax them
+Every option below defaults to TR's behaviour; TR outputs were re-checked byte for byte after each change
+(HANDOFF.md -> TR checks).
+- Root: `feature_roi_sweep.py`, `pattern_reliability.py` and `temporal_leakage.py` take `--root` (default
+  `/mnt/tempdata/lucas/fmri/recordings/TR`) and `--prep_run` (default `first_run`); `--glm_variant` is any
+  events-variant name. `glmsingle_fit.py` takes `--neural_base/--behav_base`. Defaults are `sub-01`, `ses-01..04`.
+- `feature.collect_repeat_averaged_across_sessions`: default `repeat_mode="intersect"` keeps only events present
+  in **every** session. `"average"` averages the available repeats (`min_repeats`), `"single"` keeps every event
+  (single-trial betas); both use run+trial keys so within-session repeats don't collide. `exclude_tasks` drops
+  tasks. Exposed as `--repeat_mode/--min_repeats/--exclude_tasks` in the sweep and leakage scripts.
+- `pattern_reliability.py`: default `--split_mode sessions` needs exactly 4 sessions (2-vs-2 `SPLITS`);
+  `--split_mode repeats` half-splits each condition's repeats (`--cond_key trial|stimulus`, `--min_repeats`,
+  `--n_splits`).
+- `temporal_leakage.py`: `N_POS = {1back: 6, interdms: 4, ctxdm: 3, dms: 2}`, TR's tc digit layout; `--tasks`.
+  `misc/beta_*.py` still have TR-only `tc_format` length maps.
+- `glmsingle_fit.py` (also `--n_folds` for interleaved session folds, `--raw_dir` for GLMsingle's own outputs, and
+  a printed count of the trials that can inform tuning):
   - one `--stimdur` for every event (1.5 s = TR's encoding);
   - `--upsample 3` must leave ≥ 1 frame between onsets, otherwise it errors;
   - cross-validation folds = sessions, so conditions must repeat across sessions. Conditions seen once
