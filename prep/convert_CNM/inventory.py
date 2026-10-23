@@ -7,6 +7,8 @@ Inputs
                     behavior/<sub>/<ses>/func/*_events.tsv       raw iWISDM block logs (primary behaviour source)
                     study_designs/<sub>_design_design_with_converted.tsv   run -> block file (acq label)
                     glasser_resampled/<sub>/<ses>/*Glasser64k_bold.dtseries.nii + *confounds_timeseries.tsv
+  --confounds_root  optional fMRIPrep derivatives root (<sub>/<ses>/func/*desc-confounds_timeseries.tsv); default:
+                  the confounds next to the dtseries in glasser_resampled (the Rorqual copy has none there).
   --bids_root     optional; BIDS dataset with <sub>/<ses>/func/*_events.tsv and derivatives/fmriprep/...
                   Used only to cross-check event onsets/features and read fMRIPrep sidecars (SliceTimingCorrected).
 
@@ -131,6 +133,7 @@ def bids_check(bids_root, sub, ses, fname, raw, P):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--project_data", required=True)
+    ap.add_argument("--confounds_root", default=None)
     ap.add_argument("--bids_root", default=None)
     ap.add_argument("--out", required=True)
     args = ap.parse_args()
@@ -163,6 +166,8 @@ def main():
         # neural files from the existing Glasser64k resample (fMRIPrep names use run-1, logs use run-01)
         stem = f"{args.project_data}/glasser_resampled/{sub}/{ses}/{sub}_{ses}_task-{task}_run-{int(run)}"
         dts, conf = stem + "_space-Glasser64k_bold.dtseries.nii", stem + "_desc-confounds_timeseries.tsv"
+        if args.confounds_root:
+            conf = f"{args.confounds_root}/{sub}/{ses}/func/{sub}_{ses}_task-{task}_run-{int(run)}_desc-confounds_timeseries.tsv"
         nvol = nib.load(dts).header.get_axis(0).size if os.path.exists(dts) else np.nan
         nconf = len(pd.read_csv(conf, sep="\t", usecols=[0])) if os.path.exists(conf) else np.nan
         stc = None

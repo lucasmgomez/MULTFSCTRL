@@ -5,13 +5,13 @@ dataset's) into the same state as subject TR, so `analysis/glm/glmsingle_fit.py`
 minimal code changes. Read `CLAUDE.md` first, especially **Converting another dataset to the TR layout**: it defines the
 target tree, the per-file contracts and the TR assumptions in the code.
 
-The work moved from the lab machine (`mirzakhani`) to a Compute Canada cluster. Paths for both are given below; the
-cluster paths come from the old project's readme and **have not been checked**.
+The work moved from the lab machine (`mirzakhani`) to the Compute Canada cluster Rorqual. Paths for both are given below;
+the Rorqual paths were checked on 2026-10-23 (see **Rorqual verification**).
 
 ## Status
 | Phase | State |
 |---|---|
-| 1. Inventory (read-only) | **Done.** Findings below; reproducible with `inventory.py`. |
+| 1. Inventory (read-only) | **Done**, and re-run on Rorqual (2026-10-23) with identical results. Findings below; reproducible with `inventory.py`. |
 | Decisions | Partly discussed with the user (see **Decisions**). **Confirm the open ones with the user before Phase 2.** |
 | 2. Conversion | Not started. |
 | 3. Pipeline changes | Not started. |
@@ -27,14 +27,16 @@ The user's original instructions, which still apply:
 - Commit in logical steps on branch `cnm-conversion` (made off `ctrl`).
 
 ## Data sources
-| What | mirzakhani | Cluster (unverified, from the old project's readme) |
+| What | mirzakhani | Rorqual (verified 2026-10-23; `S=/home/lucasg/links/projects/def-bashivan/shared`) |
 |---|---|---|
-| Raw iWISDM block logs (**primary behaviour source**) | `/mnt/store1/shared/fmri_dataset_project/data/behavior/` | `/project/def-pbellec/xuan/fmri_dataset_project/data/behavior/` |
-| Run → block file (**acq labels**) | `.../data/study_designs/sub-XX_design_design_with_converted.tsv` | `.../fmri_dataset_project/data/study_designs/` |
-| Glasser-64k dtseries + confounds (all 560 runs) | `.../data/glasser_resampled/<sub>/<ses>/` | `.../fmri_dataset_project/data/glasser_resampled/` |
-| BIDS + fMRIPrep 20.2.6 | `/mnt/store1/lucas/cneuromod_multfs_bids/sub-XX.tar` (5 × ~120 GB uncompressed tars + `metadata.tar`) | `/project/def-pbellec/xuan/cneuromod.multfs.fmriprep` (datalad; raw BIDS under `sourcedata/cneuromod.multfs.raw`) |
-| Reformatted behaviour (**not needed**) | `.../data/reformated_behavior/` | – |
-| TR reference data | `/mnt/tempdata/lucas/fmri/recordings/TR` | Rorqual: `/home/lucasg/links/projects/ctb-bashivan/lucasg/trevor_ctrl/TR` (same layout; holds at least the files listed under **TR checks**) |
+| Raw iWISDM block logs (**primary behaviour source**) | `/mnt/store1/shared/fmri_dataset_project/data/behavior/` | `$S/fmri_dataset_project/data/behavior/` (560 logs) |
+| Run → block file (**acq labels**) | `.../data/study_designs/sub-XX_design_design_with_converted.tsv` | `$S/fmri_dataset_project/data/study_designs/` |
+| Glasser-64k dtseries | `.../data/glasser_resampled/<sub>/<ses>/` (+ confounds) | `$S/fmri_dataset_project/data/glasser_resampled/` (560 dtseries, **no confounds**) |
+| fMRIPrep 20.2.6 confounds + sidecar JSONs | in the tars / `glasser_resampled` | `$S/cneuromod.multfs.fmriprep/<sub>/<ses>/func/` (datalad tree; only small files have content) |
+| Raw BOLD JSONs (SliceTiming) | in the tars | `$S/cneuromod.multfs.fmriprep/sourcedata/cneuromod.multfs.raw/<sub>/<ses>/func/*_bold.json` |
+| BIDS + fMRIPrep 20.2.6 | `/mnt/store1/lucas/cneuromod_multfs_bids/sub-XX.tar` (5 × ~120 GB uncompressed tars + `metadata.tar`) | `$S/cneuromod_multfs_bids/sub-XX.tar` (same tars, still packed) |
+| Reformatted behaviour (**not needed**) | `.../data/reformated_behavior/` | `$S/fmri_dataset_project/data/reformated_behavior/` |
+| TR reference data | `/mnt/tempdata/lucas/fmri/recordings/TR` | `/home/lucasg/links/projects/ctb-bashivan/lucasg/trevor_ctrl/TR` (same layout; holds the files listed under **TR checks**) |
 
 What these sources contain:
 - **`behavior/`**: 560 logs (5 subjects × 16 sessions × 7 runs) in nearly TR's raw-log format:
@@ -51,8 +53,10 @@ What these sources contain:
 - **`reformated_behavior/`**: a reformat of the BIDS events with no responses and no `dms`.
 
 ## Inventory findings
-Reproduce them with `python prep/convert_CNM/inventory.py --project_data <.../fmri_dataset_project/data> [--bids_root <BIDS>] --out <dir>`.
+Reproduce them with `python prep/convert_CNM/inventory.py --project_data <.../fmri_dataset_project/data> [--confounds_root <fMRIPrep derivatives>] [--bids_root <BIDS>] --out <dir>`.
 `--bids_root` must be an extracted BIDS tree with `derivatives/fmriprep`, and is only used for the onset cross-check and the `SliceTimingCorrected` flag.
+On Rorqual: `--confounds_root $S/cneuromod.multfs.fmriprep`, and for `--bids_root` extract the small members from the tars
+(`tar -xf sub-XX.tar --wildcards '*_events.tsv' '*_scans.tsv' '*desc-confounds_timeseries.tsv' '*_bold.json'`, about 1 min per tar).
 
 ### Layout
 - **Subjects:** sub-01, sub-02, sub-03, sub-05, sub-06. Sessions `ses-001`..`ses-016`.
@@ -217,8 +221,30 @@ Discussed with the user. **Confirm everything not marked "agreed" before Phase 2
 - **Evaluate:** `temporal_leakage.py`, `pattern_reliability.py`, `feature_roi_sweep.py`, then `plot_roi_decoding.py` in three versions (task×position removed, position removed, nothing removed).
 - **Positive control:** EVC location decoding during encoding should be near 1.0. If it isn't, suspect timing (StartTime), alignment or labels first.
 
+## Rorqual verification (2026-10-23)
+- `inventory.py` on the Rorqual copies gives byte-identical `runs/trials/timing.tsv` to the run with the scratch view, and
+  every number above (run counts, acq counts, stubs, label checks, BIDS onsets within 0.0001 s, `SliceTimingCorrected=False`,
+  volumes = confound rows, gaps, sub-06 ses-007 trial sets = ses-006, repeat table). Low-accuracy runs: 11 with response
+  fit < 0.6 (4 of them sub-06 ses-007), 21 below 0.75.
+- The 560 confound files in the datalad tree are byte-identical to the tars'. One `glasser_resampled` run
+  (sub-06 ses-010 ctxdm run-2) equals the tar's fsLR-91k cortex exactly; the repo's dlabel and `fmri_dataset_project/data`'s
+  have the same md5.
+- `cneuromod.multfs.fmriprep` is a datalad dataset: all NIfTI/CIFTI content is absent (annex pointers only). Its
+  `sourcedata/smriprep` submodule is empty; raw `events.tsv`/`scans.tsv` there are missing too.
+- `$S/sourcedata/cneuromod.multfs.raw` holds unpacked raw BOLD + events + `scans.tsv` for sub-01/02/05/06 (no sub-03).
+- **No CNM T1w or sMRIPrep/FreeSurfer output exists on any storage this account can read** (searched `$S`, all
+  `ctb-bashivan/lucasg`, scratch). The raw `anat/` folders hold only localizers/scouts. 20.2.6 took its anatomy from
+  CNeuroMod's `cneuromod.anat.smriprep` (`anat_derivatives` in `fmriprep.toml`), whose RIA store
+  (`/project/rrg-pbellec/ria-rorqual`) is not readable from this account.
+- Quotas (`diskusage_report`): `def-bashivan` is at 498K/500K files, so nothing can be written there; `ctb-bashivan`
+  409 GB/1 TB, 277K/500K files; `rrg-bashivan` 514 GB/1 TB, 155K/500K files.
+
 ## Running on the cluster
 - **Environment** (mirzakhani's `fmri_glm`): Python 3.11, numpy 2.4.0, scipy 1.16.3, pandas 2.3.3, scikit-learn 1.8.0, nilearn 0.12.1, nibabel 5.3.3, joblib 1.5.3, **glmsingle 1.2** (its FIR bug is monkeypatched in `glmsingle_fit.py` for exactly this version), fracridge 2.0, matplotlib 3.10.8. `wb_command` isn't needed.
+  - Rorqual: venv `~/envs/fmri_glm` (`module load python/3.11`, then `~/envs/fmri_glm/bin/python`). Same versions except
+    numpy 2.4.2 and scipy 1.16.2 (the closest cluster wheels; PyPI's manylinux numpy wheels don't install on the cluster
+    Python). nilearn, nibabel, joblib, fracridge come from PyPI and GLMsingle from GitHub tag `1.2`, installed with
+    `PIP_CONFIG_FILE=/dev/null pip install --no-deps ...` to bypass the cluster constraints file.
 - **Jobs:** run them through SLURM, not tmux. Set `OMP_NUM_THREADS`/`MKL_NUM_THREADS`/`OPENBLAS_NUM_THREADS` to the CPUs requested, and use 1 thread per joblib worker.
 - **TR checks:** TR data are copied to Rorqual at `/home/lucasg/links/projects/ctb-bashivan/lucasg/trevor_ctrl/TR`
   (that folder also holds ~100k other files from an earlier copy). The checks need these files (12,262 files, 6.7 GB),
