@@ -220,9 +220,13 @@ Discussed with the user. **Confirm everything not marked "agreed" before Phase 2
 ## Running on the cluster
 - **Environment** (mirzakhani's `fmri_glm`): Python 3.11, numpy 2.4.0, scipy 1.16.3, pandas 2.3.3, scikit-learn 1.8.0, nilearn 0.12.1, nibabel 5.3.3, joblib 1.5.3, **glmsingle 1.2** (its FIR bug is monkeypatched in `glmsingle_fit.py` for exactly this version), fracridge 2.0, matplotlib 3.10.8. `wb_command` isn't needed.
 - **Jobs:** run them through SLURM, not tmux. Set `OMP_NUM_THREADS`/`MKL_NUM_THREADS`/`OPENBLAS_NUM_THREADS` to the CPUs requested, and use 1 thread per joblib worker.
-- **TR checks:** TR exists only on mirzakhani. Either run the TR checks there, or ask the user to copy (~6.3 GB):
+- **TR checks:** TR exists only on mirzakhani. Either run the TR checks there, or ask the user to copy (~6.3 GB),
+  keeping the same relative layout. Everything comes from `first_run`; `ctrl_run` is only used by
+  `runs/run_lsa_ctrl.sh` and isn't needed.
   - `TR/behav/sub-01/ses-0[1-4]` (40 MB);
   - `TR/neural/fmriprep_outs/first_run/{64kDense,confounds}/sub-01/ses-0[1-4]` (1.8 GB);
+  - `TR/neural/fmriprep_outs/first_run/derivatives/sub-01/ses-0[1-4]/func/*bold.json` (39 KB). These hold the
+    StartTime (0.685 s); without them the dry run falls back to 0 and every onset frame shifts;
   - `TR/neural/fmriprep_outs/first_run/glm_runs/glmsingle_wfdelay` (4.5 GB; reference manifest, betas and decoding TSVs).
 
   Several shell scripts and defaults also hard-code mirzakhani paths (see `CLAUDE.md` → Repo copies).
