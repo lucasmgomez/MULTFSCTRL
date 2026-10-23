@@ -6,6 +6,8 @@ Glasser-64k CIFTI → single-trial GLMs → ROI decoding / model-to-brain predic
 State as of 2026-10-22. Branch `ctrl`. The reference subject's data root is
 `/mnt/tempdata/lucas/fmri/recordings/TR` ("subject TR", BIDS label `sub-01`). To bring another
 subject or dataset into this pipeline, see **Converting another dataset to the TR layout** at the end.
+A conversion of the CNeuroMod multfs dataset ("CNM", 5 subjects) is in progress on branch
+`cnm-conversion`: read `prep/convert_CNM/HANDOFF.md` for its state, findings and open decisions.
 
 ## Repo copies
 - This checkout: `/home/lucas/projects/trash/MULTFSCTRL`. The GLMsingle and decoding work lives here
@@ -57,8 +59,9 @@ analysis/
   - `1back` (6), acq `loc|ctg|obj`;
   - `interdms` (4), acq `{loc,ctg,obj}_{ABAB,ABBA}`;
   - `ctxdm` (3), acq `col|lco`, run-01 and run-02.
-- Each position is an Encoding event (~1.49 s) followed by a Delay event: ~1.74 s inside a trial,
-  3.48 s for the final delay.
+- Each position is an Encoding event (~1.49 s) followed by a Delay event: 1.74 s after position 1
+  (interdms: positions 1–2), 3.48 s after later positions. The final delay is modelled as 3.48 s
+  (the actual gap to the next trial is 4.73 s).
 - Every trial repeats once per session (same `tc`). ctxdm trials can switch between run-01 and run-02
   across sessions, so align repeats on (task, acq, phase, pos, tc) and never on run.
 - Session 5 is a control session with different tasks: `1back` alo/olo, `2back` ctg/loc, `dms`,
@@ -105,8 +108,8 @@ GLMsingle betas are in percent signal change. `<model>/64kDense/sub-01/_glmsingl
 manifest (trial ↔ event ↔ condition), summary maps (R2, HRFindex, FRACvalue, noisepool, meanvol),
 the fit-summary JSON and figures.
 
-Caveat for every GLM: delays are mostly 1.74 s, so delay betas mostly carry the tail of the encoding
-response. Delay decoding ≠ maintenance unless shown otherwise (e.g. long vs short delays).
+Caveat for every GLM: delays are 1.74–3.48 s, short relative to the HRF, so delay betas mostly carry
+the tail of the encoding response. Delay decoding ≠ maintenance unless shown otherwise (e.g. long vs short delays).
 
 ## glmsingle_fit.py
 - One joint fit over all selected runs/sessions. Conditions = (task, acq, phase, pos, tc), so each
@@ -169,6 +172,8 @@ Goal: take an older WM fMRI dataset (same task paradigm, but different delay len
 variable number of repeats per trial condition, stored in a messy BIDS + behaviour layout), put it into
 the same state as subject TR, then run `glmsingle_fit.py` and the decoding/evaluation scripts with as
 few code changes as possible.
+
+In progress for the CNeuroMod multfs dataset (CNM): see `prep/convert_CNM/HANDOFF.md`.
 
 ### Ground rules
 - Never write into `/mnt/tempdata/lucas/fmri/recordings/TR`. Give the new dataset a parallel root,
