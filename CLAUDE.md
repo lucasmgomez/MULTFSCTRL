@@ -27,7 +27,8 @@ CNM at `.../trevor_ctrl/CNM` (same layout as TR).
   (`OMP_NUM_THREADS` etc.), and use 1 thread per worker inside joblib sweeps.
 - Run long jobs in tmux (`runs/*.sh` spawn tmux windows) or with `setsid nohup`, so they survive the
   session ending.
-- Rorqual: `~/envs/fmri_glm/bin/python` (same packages; numpy 2.4.2, scipy 1.16.2). Run jobs through SLURM
+- Rorqual: `~/envs/fmri_glm/bin/python` (same packages; numpy 2.4.2, scipy 1.16.2; GLMsingle = GitHub `main` @ `1ab54a6`,
+  not the `1.2` tag, see HANDOFF.md -> Running on the cluster). Run jobs through SLURM
   (account `def-bashivan_cpu`) with BLAS threads = CPUs requested; launchers are in `prep/convert_CNM/slurm_*.sh`.
 
 ## Layout

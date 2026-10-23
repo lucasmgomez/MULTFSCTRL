@@ -288,8 +288,13 @@ leakage and reliability scripts, `pattern_reliability.py --split_mode repeats`.
 - **Environment** (mirzakhani's `fmri_glm`): Python 3.11, numpy 2.4.0, scipy 1.16.3, pandas 2.3.3, scikit-learn 1.8.0, nilearn 0.12.1, nibabel 5.3.3, joblib 1.5.3, **glmsingle 1.2** (its FIR bug is monkeypatched in `glmsingle_fit.py` for exactly this version), fracridge 2.0, matplotlib 3.10.8. `wb_command` isn't needed.
   - Rorqual: venv `~/envs/fmri_glm` (`module load python/3.11`, then `~/envs/fmri_glm/bin/python`). Same versions except
     numpy 2.4.2 and scipy 1.16.2 (the closest cluster wheels; PyPI's manylinux numpy wheels don't install on the cluster
-    Python). nilearn, nibabel, joblib, fracridge come from PyPI and GLMsingle from GitHub tag `1.2`, installed with
-    `PIP_CONFIG_FILE=/dev/null pip install --no-deps ...` to bypass the cluster constraints file.
+    Python). nilearn, nibabel, joblib, fracridge come from PyPI and GLMsingle from GitHub `main` at `1ab54a6` (Python code as
+    of 2025-08-28; its setup.py still says 1.2), installed with `PIP_CONFIG_FILE=/dev/null pip install --no-deps ...`
+    to bypass the cluster constraints file.
+  - **Not the `1.2` tag** (2023): it calls `np.Inf` (crashes in GLMdenoise PC selection under NumPy 2) and passes
+    `'extraregressors'` (typo) to the run-wise FIR, i.e. it lacks the bug `glmsingle_fit.py` monkeypatches. TR's
+    `DESIGNINFO.npy` params have `firdelay`/`firpct` (added 2024-10-25), so TR used a `main`-era install; the Python
+    code of `main` has not changed since 2025-08-28 (pcnum fix in the type-D GLMdenoise refit).
 - **Jobs:** run them through SLURM, not tmux. Set `OMP_NUM_THREADS`/`MKL_NUM_THREADS`/`OPENBLAS_NUM_THREADS` to the CPUs requested, and use 1 thread per joblib worker.
 - **TR checks:** TR data are copied to Rorqual at `/home/lucasg/links/projects/ctb-bashivan/lucasg/trevor_ctrl/TR`
   (that folder also holds ~100k other files from an earlier copy). The checks need these files (12,262 files, 6.7 GB),
