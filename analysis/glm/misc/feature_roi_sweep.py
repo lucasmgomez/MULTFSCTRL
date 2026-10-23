@@ -95,7 +95,14 @@ if __name__ == "__main__":
     ap.add_argument("--sub", default="sub-01")
     ap.add_argument("--sessions", nargs="+", default=["ses-01", "ses-02", "ses-03", "ses-04"])
     ap.add_argument("--glm_type", default="lsa", choices=["lsa", "lss", "glmsingle", "glmsingleB", "glmsingleC"])
-    ap.add_argument("--glm_variant", default="wfdelay", choices=["wfdelay", "wofdelay"])
+    ap.add_argument("--glm_variant", default="wfdelay", help="events variant, e.g. wfdelay / wofdelay")
+    ap.add_argument("--root", default="/mnt/tempdata/lucas/fmri/recordings/TR", help="dataset root (behav/, neural/)")
+    ap.add_argument("--prep_run", default="first_run", help="folder under <root>/neural/fmriprep_outs")
+    ap.add_argument("--repeat_mode", default="intersect", choices=["intersect", "average", "single"],
+                    help="intersect: average events present in every session (TR); average: average the repeats "
+                         "that exist; single: single-trial betas (see feature.collect_repeat_averaged_across_sessions)")
+    ap.add_argument("--min_repeats", type=int, default=1, help="drop conditions with fewer repeats (average/single)")
+    ap.add_argument("--exclude_tasks", nargs="+", default=None, help="task names to leave out, e.g. dms")
     ap.add_argument("--features", nargs="+", default=["loc", "obj"])
     ap.add_argument("--phases", nargs="+", default=["Encoding", "Delay"])
     ap.add_argument("--rois", nargs="+", default=list(ROI_GROUPS), choices=list(ROI_GROUPS))
@@ -118,8 +125,8 @@ if __name__ == "__main__":
     if args.per_parcel:
         args.levels = ["parcel"]
 
-    root = "/mnt/tempdata/lucas/fmri/recordings/TR"
-    glm_base_dir = f"{root}/neural/fmriprep_outs/first_run/glm_runs/{args.glm_type}_{args.glm_variant}/64kDense"
+    root = args.root
+    glm_base_dir = f"{root}/neural/fmriprep_outs/{args.prep_run}/glm_runs/{args.glm_type}_{args.glm_variant}/64kDense"
     cfg = dict(
         glm_base_dir=glm_base_dir,
         behav_base=f"{root}/behav",
@@ -130,6 +137,8 @@ if __name__ == "__main__":
         dlabel_path=args.dlabel,
         only_tasks_regex=args.tasks,
     )
+    if args.repeat_mode != "intersect" or args.exclude_tasks:
+        cfg.update(repeat_mode=args.repeat_mode, min_repeats=args.min_repeats, exclude_tasks=args.exclude_tasks)
 
     # (level, roi) -> (group, glasser labels); keyed by level because some parcels share a group's name (OFC)
     rois = {}
@@ -164,6 +173,10 @@ if __name__ == "__main__":
     out_dir = args.out_dir or os.path.join(glm_base_dir, args.sub, "_decoding_roi")
     os.makedirs(out_dir, exist_ok=True)
     tag = f"{args.glm_type}_{args.glm_variant}_{'-'.join(args.features)}" + (f"_tasks-{args.tasks}" if args.tasks else "")
+    if args.exclude_tasks:
+        tag += f"_excl-{'-'.join(args.exclude_tasks)}"
+    if args.repeat_mode != "intersect":
+        tag += f"_rep-{args.repeat_mode}" + (f"{args.min_repeats}" if args.min_repeats > 1 else "")
     if args.levels != ["group"]:
         tag += f"_{'-'.join(args.levels)}s-{'-'.join(args.rois)}"
     if args.reduce != "vertex":

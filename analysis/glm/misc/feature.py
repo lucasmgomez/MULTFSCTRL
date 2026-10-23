@@ -202,7 +202,14 @@ def collect_one_session_dict(
     phase_to_decode: str = "Encoding",
     only_tasks_regex: str | None = None,
     verbose: bool = False,
+    exclude_tasks: list[str] | None = None,
+    unique_key: bool = False,
 ):
+    """
+    exclude_tasks: task names to skip (e.g. ["dms"]).
+    unique_key:    append the trial number to the key, (task, acq, run, phase, pos, tc, trial_int), with the real run
+                   instead of "*", so trials repeated within a session (CNM) stay separate events.
+    """
     roi_mask, roi_label = make_roi_mask(dlabel_path, roi_names)
     n_roi = int(roi_mask.sum())
 
@@ -225,6 +232,8 @@ def collect_one_session_dict(
                 print("[WARN] Skipping unparsable task dir:", taskdir)
             continue
         task, acq, run = parsed
+        if exclude_tasks and task in exclude_tasks:
+            continue
 
         glm_task_dir = os.path.join(ses_dir, taskdir)
         behav_events_dir = os.path.join(behav_base, sub, session, events_subdir)
@@ -308,6 +317,8 @@ def collect_one_session_dict(
             # Run is deliberately NOT part of it ("*" slot keeps the tuple shape): ctxdm trials swap between
             # run-01 and run-02 across sessions, and tc is unique within a task variant per session.
             key = (task, acq, "*", phase_to_decode, int(pos), tc_key)
+            if unique_key:
+                key = (task, acq, run, phase_to_decode, int(pos), tc_key, trial_int)
 
             if key in out:
                 raise RuntimeError(f"Duplicate key in session {session}: {key} (file={bname}); "
@@ -354,9 +365,20 @@ def collect_repeat_averaged_across_sessions(
     phase_to_decode: str = "Encoding",
     only_tasks_regex: str | None = None,
     verbose: bool = False,
+    repeat_mode: str = "intersect",
+    min_repeats: int = 1,
+    exclude_tasks: list[str] | None = None,
 ):
     """
     Returns repeat-averaged patterns across sessions, aligned by (task, acq, phase, pos, tc) — not run.
+
+    repeat_mode:
+      "intersect" (default, TR): keep events present in EVERY session, average over sessions.
+      "average":  average all available repeats of each (task, acq, phase, pos, tc), across and within sessions;
+                  conditions with fewer than min_repeats repeats are dropped.
+      "single":   one row per event (single-trial betas, no averaging); events whose condition has fewer than
+                  min_repeats repeats are dropped. run is "*" in meta_avg, so trial_groups() keeps all repeats of
+                  a trial in the same fold.
 
     Output:
       X_avg : (n_common_events, n_vertices)
@@ -383,6 +405,8 @@ def collect_repeat_averaged_across_sessions(
             phase_to_decode=phase_to_decode,
             only_tasks_regex=only_tasks_regex,
             verbose=verbose,
+            exclude_tasks=exclude_tasks,
+            unique_key=repeat_mode != "intersect",
         )
         per_ses[ses] = d
         meta_all.append(meta)
@@ -390,6 +414,9 @@ def collect_repeat_averaged_across_sessions(
             roi_label = roi_label_local
 
         print(f"[INFO] {ses}: collected {len(d)} events")
+
+    if repeat_mode != "intersect":
+        return _collect_repeats(per_ses, meta_all, sessions, roi_label, repeat_mode, min_repeats)
 
     # Intersect keys across ALL sessions
     key_sets = [set(per_ses[ses].keys()) for ses in sessions]
@@ -454,6 +481,36 @@ def collect_repeat_averaged_across_sessions(
     meta_per_ses = pd.concat(meta_all, ignore_index=True) if meta_all else pd.DataFrame()
 
     return X, y, meta_avg, meta_per_ses
+
+
+def _collect_repeats(per_ses, meta_all, sessions, roi_label, repeat_mode, min_repeats):
+    """repeat_mode "single" / "average" of collect_repeat_averaged_across_sessions (keys from unique_key=True)."""
+    by_cond = {}  # (task, acq, phase, pos, tc) -> [(roi_vec, feat), ...] in session / run / trial order
+    for ses in sessions:
+        for key in sorted(per_ses[ses]):
+            task, acq, run, phase, pos, tc, trial_int = key
+            by_cond.setdefault((task, acq, phase, pos, tc), []).append(per_ses[ses][key])
+    conds = sorted(k for k, v in by_cond.items() if len(v) >= min_repeats)
+    if not conds:
+        raise RuntimeError(f"No conditions with >= {min_repeats} repeats")
+    print(f"[INFO] conditions with >= {min_repeats} repeats: {len(conds)} of {len(by_cond)}")
+
+    X_rows, y_rows, meta_rows = [], [], []
+    for cond in conds:
+        items = by_cond[cond]
+        feats = pd.unique(pd.Series([f for _, f in items]).astype(str))
+        if len(feats) != 1:
+            raise RuntimeError(f"Label mismatch across repeats for {cond}: {feats}")
+        task, acq, phase, pos, tc = cond
+        rows = [items] if repeat_mode == "average" else [[it] for it in items]
+        for grp in rows:
+            X_rows.append(np.mean(np.stack([v for v, _ in grp], axis=0), axis=0).astype(np.float32))
+            y_rows.append(grp[0][1])
+            meta_rows.append({"task": task, "acq": acq, "run": "*", "phase": phase, "pos": pos, "tc": tc,
+                              "feat": grp[0][1], "roi": roi_label, "n_sessions_averaged": len(grp),
+                              "n_repeats": len(items)})
+    meta_per_ses = pd.concat(meta_all, ignore_index=True) if meta_all else pd.DataFrame()
+    return np.vstack(X_rows).astype(np.float32), np.asarray(y_rows), pd.DataFrame(meta_rows), meta_per_ses
 
 
 # ----------------------------

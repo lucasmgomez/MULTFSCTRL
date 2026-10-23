@@ -50,9 +50,9 @@ def parse_args():
     p.add_argument("--neural_base", default="/mnt/tempdata/lucas/fmri/recordings/TR/neural/fmriprep_outs/first_run",
                    help="Contains 64kDense/, confounds/, derivatives/ and glm_runs/.")
     p.add_argument("--behav_base", default="/mnt/tempdata/lucas/fmri/recordings/TR/behav")
-    p.add_argument("--events_variant", default="wfdelay", choices=["wfdelay", "wofdelay"],
-                   help="Which base-events to model (events_<variant>/). Default wfdelay: the post-trial "
-                        "period is modelled instead of leaking into the baseline and the noise PCs.")
+    p.add_argument("--events_variant", default="wfdelay",
+                   help="Which base-events to model (events_<variant>/, e.g. wfdelay or wofdelay). Default wfdelay: "
+                        "the post-trial period is modelled instead of leaking into the baseline and the noise PCs.")
     p.add_argument("--tasks_regex", default=None,
                    help="Only runs whose 'task-<task>_<acq>_run-<run>' matches (e.g. 'interdms_loc'). Default: all.")
     p.add_argument("--tr", type=float, default=1.49, help="TR in seconds (default 1.49).")
@@ -67,6 +67,10 @@ def parse_args():
                    help="Comma-separated confound columns to include as extra regressors.")
     p.add_argument("--add_fd", action="store_true", help="Also include framewise_displacement.")
 
+    p.add_argument("--n_folds", type=int, default=None,
+                   help="Cross-validation folds. Default: one per session (leave-one-session-out). With k < n "
+                        "sessions, session i (sorted) goes to fold i %% k, so neighbouring sessions are split up. "
+                        "Fewer folds run faster; a condition whose repeats all fall in one fold cannot inform tuning.")
     p.add_argument("--n_pcs", type=int, default=10, help="Max GLMdenoise PCs (GLMsingle default 10).")
     p.add_argument("--fracs_min", type=float, default=0.005,
                    help="Smallest ridge fraction evaluated. GLMsingle's default floor (0.05) was chosen by ~90%% "
@@ -83,6 +87,9 @@ def parse_args():
 
     p.add_argument("--output_root", default=None,
                    help="Root for outputs (default <neural_base>/glm_runs). Model folders are created inside.")
+    p.add_argument("--raw_dir", default=None,
+                   help="GLMsingle's own outputdir (deleted and rewritten by GLMsingle; ~2 GB for TR). "
+                        "Default <model>/_glmsingle/glmsingle_raw. Must be a dedicated folder.")
     p.add_argument("--save_multidscalar", action="store_true",
                    help="Also save one multi-scalar dscalar per run with all its event betas.")
     p.add_argument("--dry_run", action="store_true",
@@ -283,6 +290,22 @@ def main():
     print(f"Conditions: {len(cond_keys)}  events: {int(reps.sum())}  "
           f"repeats per condition: {reps.value_counts().sort_index().to_dict()}")
 
+    # ---- cross-validation folds (by session) ----
+    sessions = sorted(set(r["ses"] for r in runs))
+    n_folds = args.n_folds or len(sessions)
+    if not 2 <= n_folds <= len(sessions):
+        raise ValueError(f"--n_folds must be in [2, {len(sessions)}] (number of sessions)")
+    for r in runs:
+        r["fold"] = sessions.index(r["ses"]) % n_folds
+    # GLMsingle only scores held-out trials whose condition also occurs in the training folds
+    ev_all = pd.concat([r["events"].assign(task=r["task"], fold=r["fold"]) for r in runs], ignore_index=True)
+    n_fold_per_cond = ev_all.groupby("cond_key")["fold"].nunique()
+    ev_all["tunes"] = ev_all["cond_key"].map(n_fold_per_cond) > 1
+    print(f"Folds: {n_folds} ({'one per session' if n_folds == len(sessions) else 'interleaved sessions'}); "
+          f"trials that inform tuning (condition in >= 2 folds), per task:")
+    print(ev_all.groupby(["task", "phase"])["tunes"].agg(["sum", "size"])
+          .rename(columns={"sum": "tuning", "size": "all"}).to_string())
+
     # ---- design on the upsampled grid ----
     dt_up = args.tr / args.upsample
     manifest_rows = []
@@ -349,10 +372,10 @@ def main():
     from glmsingle.glmsingle import GLM_single
     patch_runwise_fir(glmsingle_module, len(runs))
 
-    sessions = sorted(set(r["ses"] for r in runs))
     ses_num = [sessions.index(r["ses"]) + 1 for r in runs]
-    # one fold per session (held-out runs); GLMsingle needs each fold as an array
-    xvalscheme = [np.flatnonzero(np.array(ses_num) == k) for k in range(1, len(sessions) + 1)]
+    # held-out runs per fold (default one fold per session); GLMsingle needs each fold as an array
+    fold_of_run = np.array([r["fold"] for r in runs])
+    xvalscheme = [np.flatnonzero(fold_of_run == k) for k in range(n_folds)]
     want = [0, int("B" in args.save_types), int("C" in args.save_types), 1]
     params = {
         "wantlibrary": 1, "wantglmdenoise": 1, "wantfracridge": 1,
@@ -365,9 +388,10 @@ def main():
     if len(sessions) < 2:
         raise RuntimeError("Need >= 2 sessions: repeats across sessions drive GLMsingle's cross-validation.")
     print(f"Fitting GLMsingle: stimdur={args.stimdur}s, tr={dt_up:.4f}s, folds={len(xvalscheme)} (sessions)")
+    raw_dir = args.raw_dir or os.path.join(work_dir, "glmsingle_raw")
     glm = GLM_single(params)
     results = glm.fit(designs, data, args.stimdur, dt_up,
-                      outputdir=os.path.join(work_dir, "glmsingle_raw"),
+                      outputdir=raw_dir,
                       figuredir=os.path.join(work_dir, "figures"))
 
     def full(vec):
