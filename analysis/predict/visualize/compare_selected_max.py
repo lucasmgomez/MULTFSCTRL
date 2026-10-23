@@ -98,6 +98,7 @@ def extract_session5_roi_betas(ignored_tasks=None):
             try:
                 beta_data = nib.load(beta_search[0]).get_fdata() 
                 for roi in rois:
+                    import pdb; pdb.set_trace()
                     roi_mean = np.mean(beta_data[:, roi_masks[roi]])
                     roi_data[roi]['beta_val'].append(roi_mean)
                     roi_data[roi]['trial_id'].append(unique_trial_id)

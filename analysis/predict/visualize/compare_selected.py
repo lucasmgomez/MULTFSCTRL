@@ -35,10 +35,6 @@ def create_roi_mask(dlabel_info, roi_name, lateralize='LH_RH'):
 # ---------------------------------------------------------
 # 2. Main Extraction & Z-Scoring
 # ---------------------------------------------------------
-
-# ---------------------------------------------------------
-# 2. Main Extraction & Z-Scoring
-# ---------------------------------------------------------
 def extract_session5_roi_betas():
     dlabel_path = "/home/lucas/projects/MULTFSCTRL/prep/fmriprep/Glasser_LR_Dense64k.dlabel.nii"
     base_betas_dir = "/mnt/tempdata/lucas/fmri/recordings/TR/neural/fmriprep_outs/ctrl_run/glm_runs/lsa/64kDense/sub-01/ses-05"

@@ -3,7 +3,9 @@
 Single-subject (`sub-01`) multi-task working-memory fMRI study. Pipeline: DICOM → BIDS → fMRIPrep →
 Glasser-64k CIFTI → single-trial GLMs → ROI decoding / model-to-brain prediction.
 
-State as of 2026-10-22. Branch `ctrl`.
+State as of 2026-10-22. Branch `ctrl`. The reference subject's data root is
+`/mnt/tempdata/lucas/fmri/recordings/TR` ("subject TR", BIDS label `sub-01`). To bring another
+subject or dataset into this pipeline, see **Converting another dataset to the TR layout** at the end.
 
 ## Repo copies
 - This checkout: `/home/lucas/projects/trash/MULTFSCTRL`. The GLMsingle and decoding work lives here
@@ -160,3 +162,132 @@ response. Delay decoding ≠ maintenance unless shown otherwise (e.g. long vs sh
 - DLPFC object/category drop when task/position structure is removed; DLPFC location does not.
 - Noise ceiling tracks decoding across parcels (Spearman ρ ≈ 0.77, measured on LSS betas). DLPFC
   reliability is low (about 0.05 after task×position removal).
+
+## Converting another dataset to the TR layout
+
+Goal: take an older WM fMRI dataset (same task paradigm, but different delay lengths and a more
+variable number of repeats per trial condition, stored in a messy BIDS + behaviour layout), put it into
+the same state as subject TR, then run `glmsingle_fit.py` and the decoding/evaluation scripts with as
+few code changes as possible.
+
+### Ground rules
+- Never write into `/mnt/tempdata/lucas/fmri/recordings/TR`. Give the new dataset a parallel root,
+  e.g. `/mnt/tempdata/lucas/fmri/recordings/<ID>/{behav,neural}`, mirroring TR's tree exactly.
+- Do not hand-edit or move the original raw data. Build the new tree with copies or symlinks, plus a
+  mapping table (original path → new path), and keep conversion code in the repo (e.g. `prep/convert_<ID>/`).
+- When the code needs changing, prefer adding a CLI argument (e.g. `--root`, `--sessions`) whose
+  default keeps TR's behaviour, over copying scripts.
+- Inventory the raw data first and report back before converting. Ask the user about the decisions
+  listed at the end.
+
+### Target tree (paths relative to the new root; `<sub>` e.g. `sub-01`, `<ses>` = `ses-01`…)
+```
+behav/<sub>/<ses>/
+  <sub>_ses-<n>_<date>_task-<task>_<acq>_block_<k>_events_<HH-MM-SS>.tsv          raw block log (one per run)
+  <sub>_ses-<n>_<date>_task-<task>_<acq>_block_<k>_events_<HH-MM-SS>_scored.tsv   scored copy (score_responses.py)
+  events_wfdelay/task-<task>_<acq>_run-<run>_base-events.tsv  (+ _LSA/ _LSS/ folders)
+  events_wofdelay/...
+neural/fmriprep_outs/<prep_run>/
+  bids/<sub>/<ses>/func/<sub>_<ses>_task-<task>_acq-<acqfp>_run-<run>_bold.nii.gz (+ .json with SliceTiming)
+  derivatives/<sub>/<ses>/func/<sub>_<ses>_task-<task>_acq-<acqfp>_run-<run>_space-fsLR_den-91k_bold.{dtseries.nii,json}
+  64kDense/<sub>/<ses>/<sub>_<ses>_task-<task>_acq-<acqfp>_run-<run>_space-Glasser64k_bold.dtseries.nii
+  confounds/<sub>/<ses>/<sub>_<ses>_task-<task>_acq-<acqfp>_run-<run>_desc-confounds_timeseries.tsv
+  glm_runs/...   (written by the GLM scripts)
+```
+- `<task>` has no underscore (`1back`, `interdms`, `ctxdm`). `<acq>` (behaviour) may contain one
+  (`obj_ABAB`); `<acqfp>` is the same without underscores (`objABAB`).
+- Block `k` (0-based, in the behaviour filename) = BIDS `run-(k+1)`.
+- Behaviour session folders are `ses-0X`, while behaviour filenames use `ses-X`.
+- Session 5's tasks never occur in sessions 1–4, so session 5 is not part of the repeat structure.
+
+### Per-file contracts (what the code actually reads)
+- **Raw block log**: tab-separated, one row per trial.
+  - `TrialNumber` (int, sorted = trial order).
+  - Per position p = 1..P: `loc{p}`, `obj{p}`, `ctg{p}` (also `ref{p}`, `ang{p}`).
+  - `tc`.
+  - Per stimulus index i = 0..P-1: `stimulus_{i}_onset`, `stimulus_{i}_offset`, plus `response_{i}` /
+    `response_{i}_time` where responses exist.
+  - Onsets are **seconds from the start of the run (scanner trigger / first volume)**. The first
+    stimulus is at ≈3.0 s.
+  - TR's raw logs start with a UTF-8 BOM; the scored copies are read as plain TSV.
+- **Scored log** (`prep/behav/score_responses.py <dir>`):
+  - Adds `expected_ans{k}`, `ans{k}`, `ans{k}_comp`, `trial_correct` (2 = match, 3 = non-match).
+  - Its filename regex only knows `interdms|ctxdm|1back`, with specs `{ctg,obj,loc}_{ABAB,ABBA}`,
+    `col|lco` and `{ctg,obj,loc}`. Variants need `score_responses_ctrl.py` or an extension.
+- **Base events** (`analysis/glm/create_events_lsa.py -i behav/<sub>/<ses> -o .../events_wfdelay`):
+  - Columns `onset, duration, trial_type, trial (TrialNN, by sorted TrialNumber), pos (1-based), phase (Encoding|Delay), event_id (Enc0001/Del0001, chronological per phase)`.
+  - Encoding = stimulus onset→offset.
+  - Delay = offset → next stimulus onset.
+  - The final delay of each trial has a **fixed** `--final_delay_duration` (3.48 s for TR); that
+    delay is left out for `wofdelay`.
+  - It globs every `*.tsv` in the input folder, so raw and scored logs both get processed.
+- **dtseries**: 64,984 surface vertices (Glasser 64k template = fsLR 32k × 2, no subcortex). Made from
+  fMRIPrep's 91k output by `prep/fmriprep/cifti_resample.sh` (`wb_command -cifti-resample …
+  ADAP_BARY_AREA CUBIC`, template `prep/fmriprep/Glasser_LR_Dense64k.dlabel.nii`).
+- **fMRIPrep**: `nipreps/fmriprep:23.2.0 --output-spaces fsLR --cifti-output 91k`, slice-timing
+  correction on (see `prep/fmriprep/docker_run.sh`).
+  - `glmsingle_fit.py` reads `StartTime` from the derivatives `*bold.json` and falls back to 0 with a
+    warning. Check the value: it's the STC reference time; for TR it is 0.685 s, the midpoint of the BIDS `SliceTiming` range (0–1.37 s).
+- **Confounds**: fMRIPrep `desc-confounds_timeseries.tsv`. Uses `trans_*`, `rot_*` and
+  `framewise_displacement`. Row count must equal the number of time points.
+- **Labels**: `loc` is binary, `obj` has 4 values, and `ctg = obj // 2`.
+  - `tc` = for each position, the `loc` digit then the `obj` digit, concatenated; leading zeros are
+    lost to float.
+  - **Verify all of these for the new data before trusting them**: check `ctg == obj // 2`, check
+    `expected_ans` against consecutive feature equality, and decode `tc` back into `loc{p}`/`obj{p}`.
+
+### Pipeline stages, with the script for each
+1. DICOM/BIDS cleanup: `prep/dicom2bids/` (`map_dcms.py` renames block→run and acq labels; `cnmod`
+   heudiconv conversion and defacing). If the old BIDS is usable, write a mapping script instead of
+   reconverting.
+2. fMRIPrep (`prep/fmriprep/docker_run.sh`, edit `BASE`), then `cifti_resample.sh` (→ `64kDense`) and
+   `confounds.sh`. These scripts hard-code `ctrl_run` paths and the session range, so edit or
+   parametrize them.
+3. Behaviour: put the raw logs in `behav/<sub>/<ses>/` with TR-style names, run `score_responses.py`,
+   then run `create_events_lsa.py` (once with `-o events_wfdelay`; for `wofdelay` rerun with that
+   output, which drops final delays).
+4. GLM:
+   - `python analysis/glm/glmsingle_fit.py --sub <sub> --sessions ... --neural_base <root>/neural/fmriprep_outs/<prep_run> --behav_base <root>/behav --events_variant wfdelay --add_fd --dry_run`
+     first. Check the printed run, condition and repeat counts and the max onset error, and that no
+     two events share a frame.
+   - Then fit with `--save_types B C D`; set `--output_root` if needed. A launcher example is in
+     `runs/run_glmsingle.sh` (edit the bases).
+5. Evaluation, as for TR:
+   - `temporal_leakage.py`, `pattern_reliability.py`, `feature_roi_sweep.py` and `plot_roi_decoding.py`.
+   - Positive control: EVC location decoding during encoding should be near 1.0. If it isn't, timing,
+     alignment or labels are wrong.
+
+### Hard-coded TR assumptions to fix or parametrize
+- Root `/mnt/tempdata/lucas/fmri/recordings/TR` is hard-coded in `feature_roi_sweep.py`,
+  `pattern_reliability.py` and `temporal_leakage.py`, and is the default in `glmsingle_fit.py`
+  (overridable via `--neural_base/--behav_base`). Defaults are `sub-01` and `ses-01..04`.
+- `feature.collect_repeat_averaged_across_sessions` keeps only events present in **every** session.
+  With variable repeats this will drop data; change it to average the available repeats, with a
+  minimum count.
+- `pattern_reliability.py` requires exactly 4 sessions (`--sessions nargs=4`, fixed 2-vs-2 `SPLITS`).
+  Generalise it to split repeats in half per condition.
+- `temporal_leakage.py` has `N_POS = {1back: 6, interdms: 4, ctxdm: 3}` and assumes TR's tc digit
+  layout. `misc/beta_*.py` have similar `tc_format` length maps.
+- `glmsingle_fit.py`:
+  - one `--stimdur` for every event (1.5 s = TR's encoding);
+  - `--upsample 3` must leave ≥ 1 frame between onsets, otherwise it errors;
+  - cross-validation folds = sessions, so conditions must repeat across sessions. Conditions seen once
+    still get betas but don't inform the hyperparameters;
+  - needs ≥ 2 sessions;
+  - finds exactly one `*task-<task>_<acq>_block_<run-1>_*scored*.tsv` per run, or errors.
+- Condition and repeat identity is `(task, acq, phase, pos, tc)` everywhere; run is ignored. If the old
+  logs lack `tc`, build an equivalent per-trial stimulus-sequence ID.
+- `create_events_lsa.py`: fixed final-delay duration; block→run parsed from `block_<k>` / `run_<k>` in
+  the filename.
+- Decoding grouped-CV groups and nuisance cells come from `task`, `acq`, `run`, `pos` and `tc` in the
+  meta tables (run is `"*"` after alignment).
+
+### Decisions to ask the user about (don't guess)
+- The new subject's ID and root path, and which fMRIPrep run/version to use (reuse existing outputs, or
+  rerun fMRIPrep 23.2.0 to match TR).
+- How to model the different delay lengths in GLMsingle: one stimdur, or a split fit. Longer delays
+  separate encoding from delay better; check with `temporal_leakage.py`.
+- The minimum number of repeats per condition for averaging and reliability, and whether to drop
+  conditions seen only once.
+- Whether task variants or labels differ from TR (new task names, more positions, different feature
+  coding), which would mean extending the scoring and label code.
