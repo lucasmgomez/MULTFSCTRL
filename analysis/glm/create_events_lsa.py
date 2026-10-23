@@ -21,6 +21,10 @@ def parse_args():
     parser.add_argument('--final_delay_duration', type=float, default=3.48,
                         help="Duration (s) for the final delay after the last stimulus in a trial.")
 
+    parser.add_argument('--min_delay_s', type=float, default=0.0,
+                        help="Drop within-trial delays shorter than this (s). Default 0 keeps all. CNM: 1.0 drops "
+                             "the 0.5 s gap after position 1, whose beta is not estimable (see HANDOFF.md #3).")
+
     parser.add_argument('--lsa_mode', choices=['encoding', 'delay', 'both'], default='both',
                         help="Which event set(s) to include in the LSA events file.")
 
@@ -70,7 +74,7 @@ def extract_metadata(filename):
     return task_name, run_num, timestamp
 
 
-def build_base_events(df, task_name, final_delay_duration):
+def build_base_events(df, task_name, final_delay_duration, min_delay_s=0.0):
     """
     Build a base events table with one row per Encoding/Delay event.
     Columns:
@@ -114,7 +118,7 @@ def build_base_events(df, task_name, final_delay_duration):
 
                 if pd.notna(s_off) and pd.notna(next_on):
                     dur = float(next_on - s_off)
-                    if dur > 0:
+                    if dur > 0 and dur >= min_delay_s:
                         base.append({
                             'onset': float(s_off),
                             'duration': dur,
@@ -224,7 +228,7 @@ def write_lsa_events_for_block(base_df, output_dir, task_name, run_num, overwrit
     return out_path
 
 
-def process_single_file(file_path, output_dir, final_delay_duration, overwrite, lsa_mode, save_base):
+def process_single_file(file_path, output_dir, final_delay_duration, overwrite, lsa_mode, save_base, min_delay_s=0.0):
     base_name = os.path.basename(file_path)
     task_name, run_num, timestamp = extract_metadata(base_name)
 
@@ -237,7 +241,7 @@ def process_single_file(file_path, output_dir, final_delay_duration, overwrite, 
         print(f"   Error reading file: {e}")
         return
 
-    base_df = build_base_events(df, task_name, final_delay_duration)
+    base_df = build_base_events(df, task_name, final_delay_duration, min_delay_s)
     if base_df.empty:
         print("   -> No usable events parsed. Skipping.")
         return
@@ -271,7 +275,8 @@ def main():
             final_delay_duration=args.final_delay_duration,
             overwrite=args.overwrite,
             lsa_mode=args.lsa_mode,
-            save_base=args.save_base
+            save_base=args.save_base,
+            min_delay_s=args.min_delay_s,
         )
 
 

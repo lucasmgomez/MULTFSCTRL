@@ -234,6 +234,47 @@ def score_1back_df(
 
 
 # =========================
+# DMS scoring (CNM: delayed match-to-sample on one feature, 2 stimuli)
+# =========================
+def score_dms_row(
+    row: pd.Series,
+    feature: Feature,
+    resp_col: str = "response_1",
+) -> Dict[str, Any]:
+    """
+    DMS has 2 stimuli and 1 scored response (at stimulus 2).
+
+    ans1: compare 2 vs 1
+
+    Returns flat dict:
+      ans1, trial_correct,
+      expected_ans1,
+      ans1_comp
+    """
+    match1 = bool(row[f"{feature}2"] == row[f"{feature}1"])
+    exp1 = _truth_to_resp_code(match1)
+
+    r1 = row.get(resp_col, pd.NA)
+    ans1 = (not _is_missing(r1)) and (int(r1) == exp1)
+
+    return {
+        "ans1": bool(ans1),
+        "trial_correct": bool(ans1),
+        "expected_ans1": int(exp1),
+        "ans1_comp": f"{feature}2=={feature}1",
+    }
+
+
+def score_dms_df(
+    df: pd.DataFrame,
+    feature: Feature,
+    resp_col: str = "response_1",
+) -> pd.DataFrame:
+    scored = df.apply(lambda r: score_dms_row(r, feature=feature, resp_col=resp_col), axis=1)
+    return pd.concat([df, pd.DataFrame(scored.tolist(), index=df.index)], axis=1)
+
+
+# =========================
 # Wrapper
 # =========================
 def score_block_df(
@@ -266,7 +307,7 @@ import pandas as pd
 
 FNAME_TASK_RE = re.compile(
     r"""
-    task-(?P<task>interdms|ctxdm|1back)_
+    task-(?P<task>interdms|ctxdm|1back|dms)_
     (?P<spec>.+?)
     _block_(?P<block>\d+)
     _events_.*\.tsv$
@@ -277,6 +318,7 @@ FNAME_TASK_RE = re.compile(
 INTERDMS_SPEC_RE = re.compile(r"^(?P<feature>ctg|obj|loc)_(?P<order>ABAB|ABBA)$")
 CTXDM_SPEC_RE = re.compile(r"^(?P<forder>col|lco)$")
 ONEBACK_SPEC_RE = re.compile(r"^(?P<feature>ctg|obj|loc)$")
+DMS_SPEC_RE = ONEBACK_SPEC_RE
 
 
 def parse_task_from_filename(path: str) -> dict:
@@ -321,6 +363,12 @@ def parse_task_from_filename(path: str) -> dict:
             raise ValueError(f"Bad 1back spec '{spec}' in {base} (expected ctg/obj/loc)")
         return {"task": "1back", "feature": mm.group("feature")}
 
+    if task == "dms":
+        mm = DMS_SPEC_RE.match(spec)
+        if not mm:
+            raise ValueError(f"Bad dms spec '{spec}' in {base} (expected ctg/obj/loc)")
+        return {"task": "dms", "feature": mm.group("feature")}
+
     raise ValueError(f"Unhandled task='{task}' parsed from {base}")
 
 
@@ -353,6 +401,8 @@ def score_tsv_file(in_path: str, overwrite: bool = False) -> str:
         df_scored = score_ctxdm_df(df, forder=info["forder"])
     elif info["task"] == "1back":
         df_scored = score_1back_df(df, feature=info["feature"])
+    elif info["task"] == "dms":
+        df_scored = score_dms_df(df, feature=info["feature"])
     else:
         raise RuntimeError(f"Unexpected routing result: {info}")
 
@@ -375,7 +425,7 @@ def _expand_inputs(path_or_glob: str) -> list[str]:
 
 
 def main():
-    ap = argparse.ArgumentParser("Score task TSVs (interdms / ctxdm / 1back) by routing from filename.")
+    ap = argparse.ArgumentParser("Score task TSVs (interdms / ctxdm / 1back / dms) by routing from filename.")
     ap.add_argument("input", help="TSV file path, a directory, or a glob (e.g. '/path/*.tsv').")
     ap.add_argument("--overwrite", action="store_true", help="Overwrite existing *_scored.tsv.")
     args = ap.parse_args()
