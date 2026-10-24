@@ -5,15 +5,16 @@
 #   step: leakage | reliability | sweep-<feature> (loc, ctg or obj) | plots
 # Single-trial betas (--repeat_mode single), dms left out of decoding (HANDOFF.md decisions #5, #6).
 # Outputs go to <glm>/64kDense/<sub>/_decoding_roi and _reliability_pattern (the scripts' defaults).
+# Env overrides (smoke tests): CNM_ROOT (dataset root), SESSIONS (space-separated; default all of the subject's).
 set -euo pipefail
 SUB=$1; GT=$2; VAR=$3; STEP=$4; NPERM=${5:-1000}
 N=${SLURM_CPUS_PER_TASK:-8}
 export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 FLEXIBLAS_NUM_THREADS=1
 REPO=/home/lucasg/projects/MULTFSCTRL
-CNM=/home/lucasg/links/projects/ctb-bashivan/lucasg/trevor_ctrl/CNM
+CNM=${CNM_ROOT:-/home/lucasg/links/projects/ctb-bashivan/lucasg/trevor_ctrl/CNM}
 PY=~/envs/fmri_glm/bin/python
 DL=$REPO/prep/fmriprep/Glasser_LR_Dense64k.dlabel.nii
-SES=$(ls -d $CNM/behav/$SUB/ses-* | xargs -n1 basename | tr '\n' ' ')
+SES=${SESSIONS:-$(ls -d $CNM/behav/$SUB/ses-* | xargs -n1 basename | tr '\n' ' ')}
 C="--sub $SUB --sessions $SES --glm_type $GT --glm_variant $VAR --root $CNM --prep_run fmriprep_20.2.6 --dlabel $DL"
 OUT=$CNM/neural/fmriprep_outs/fmriprep_20.2.6/glm_runs/${GT}_${VAR}/64kDense/$SUB/_decoding_roi
 cd $REPO/analysis/glm/misc
