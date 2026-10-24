@@ -15,7 +15,7 @@ the Rorqual paths were checked on 2026-10-23 (see **Rorqual verification**).
 | Decisions | **All agreed** (2026-10-23, see **Decisions**). |
 | 2. Conversion | **Done** for all 5 subjects (558 runs); `check_tree.py` passes. See **Phase 2–3 results**. |
 | 3. Pipeline changes | **Done**; TR checks byte-identical. See **Phase 2–3 results**. |
-| 4. Fit + validate | Pilot (sub-01, ses-01..04, both pos-1 designs) submitted. |
+| 4. Fit + validate | Pilot done (decision #3 confirmed); TR refit reproduces TR's betas; full sub-01 fit submitted (job 25064630). |
 
 The user's original instructions, which still apply:
 - Never write into the TR tree or the original data; build a parallel root with symlinks/copies plus a mapping table.
@@ -211,6 +211,41 @@ leakage and reliability scripts, `pattern_reliability.py --split_mode repeats`.
 - New modes on TR: `--repeat_mode average --min_repeats 4` is byte-identical to the default; repeat-split
   reliability with the trial key matches the 2-vs-2 session split closely (e.g. EVC encoding r 0.245 vs 0.246).
   Single-trial TR decoding (reference for CNM): EVC loc encoding 0.975 (0.996 averaged), obj 0.615 (0.688).
+
+## Phase 4 results so far (2026-10-24)
+**TR refit on Rorqual** (`glmsingle_fit.py`, TR's settings, type D, outputs in scratch): fit summary equals the saved
+one (pcnum 0, median frac identical, frac_at_floor 0.27489 vs 0.27495); all 4,032 betas correlate ≥ 0.999996 with
+the saved ones, mean |diff| ~1e-5 of mean |beta|. So the Rorqual environment reproduces TR's GLM.
+(`CNM/pilot/tr_refit_compare.py`; 2 h 35 min, 64 GB peak at 16 CPUs.)
+
+**Decision #3 pilot** (sub-01, ses-01..04, `pilot_compare.py`, table in `CNM/pilot/pilot_compare.tsv`): encoding
+betas, single-trial decoding (balanced acc., demean task×acq, tuned) and stimulus-key repeat reliability:
+
+| | EVC loc pos 1 / 2 / 3 | VTC loc pos 1 / 2 / 3 | EVC reliability pos 2 |
+|---|---|---|---|
+| B, pos-1 delay dropped (`wfdelay`) | 0.92 / **0.88** / 0.94 | 0.82 / **0.74** / 0.84 | 0.057 |
+| B, pos-1 delay modelled (`wfdelaypos1`) | 0.91 / **0.58** / 0.94 | 0.75 / **0.61** / 0.86 | −0.032 |
+| D, dropped | 0.88 / 0.90 / 0.97 | 0.84 / 0.87 / 0.92 | 0.114 |
+| D, modelled | 0.89 / 0.91 / 0.96 | 0.82 / 0.88 / 0.91 | 0.115 |
+
+- Type B confirms the VIF prediction: modelling the 0.5 s delay ruins the pos-2 encoding beta. Type D's ridge
+  absorbs it (± 0.01) by shrinking the collinear pair: 58% of vertices at the ridge floor (vs 45%), median frac
+  0.005 (vs 0.012), and type D took 2.6× longer. Decision #3 stands (`wfdelay`).
+- GLMdenoise picked 2 PCs (`wfdelay`) / 4 (`wfdelaypos1`), unlike TR's 0, so type C ≠ B and is saved.
+- IT is at chance in this 4-session single-trial pilot (loc and obj).
+
+**Runtime/memory.** GLMsingle refits the FULL model for every HRF bin × setting (B: 20 HRFs; GLMdenoise CV:
+20 × 11 PC counts; D: 20 × 21 fractions); folds only enter `calcbadness`, which compares betas across folds. So
+`--n_folds` saves little time: **keep one fold per session**. Measured stage times:
+
+| fit | trials | CPUs | B | PC CV | D | total | peak RSS |
+|---|---|---|---|---|---|---|---|
+| pilot `wfdelay` | 2,796 | 32 | 10 min | 28 min | 56 min | 1 h 58 | 47 GB |
+| pilot `wfdelaypos1` | 3,184 | 32 | 16 min | 47 min | 2 h 27 | 3 h 57 | 49 GB |
+| TR refit | 4,032 | 16 | 20 min | 47 min | 1 h 10 | 2 h 35 | 64 GB |
+
+Full sub-01 (11,184 trials, ~63k frames, ~20× TR's per-fit cost): estimated 15–45 h, 150–250 GB; submitted with
+64 CPUs, 300 GB, 3 days.
 
 ## Phase 2 plan: conversion (`prep/convert_CNM/`)
 1. **`build_tree.py`** writes the mapping table and the tree. One row per run, with columns:
