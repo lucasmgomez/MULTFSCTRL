@@ -247,6 +247,31 @@ betas, single-trial decoding (balanced acc., demean task×acq, tuned) and stimul
 Full sub-01 (11,184 trials, ~63k frames, ~20× TR's per-fit cost): estimated 15–45 h, 150–250 GB; submitted with
 64 CPUs, 300 GB, 3 days.
 
+**Full sub-01 fit diagnostics (from the stages done by 2026-10-24 13:00; scripts in `diag/`):**
+- Stage times at 64 CPUs: B 1 h 56, GLMdenoise CV 7 h 44, C 37 min, D running. Peak RSS 188 GB so far.
+  Billing is max(cores, mem / 4 GB), so a 300 GB job is charged as 75 cores: request memory tightly and take
+  ≈ mem/4 GB cores (more cores are free; the fit only keeps ~15 busy on average).
+- GLMdenoise: clean cross-validation curve, 2 PCs. HRF-index spread similar to TR's.
+- **Run-wise FIR (GLMsingle's diagnostic) looks very different from TR's**: TR peaks at ~4 s in every run; CNM's
+  top vertices show the ~4 s peak in every task plus a later bump (~11–12 s) in ctxdm/interdms/dms (1back clean,
+  peak 4.7 s). Not a timing offset: (1) the early peak is at the normal latency in every task and session;
+  (2) CNM's top-FIR vertices are left motor/somatosensory (L_4, L_1, L_3b, L_2, OP4, 6d) — right-hand button
+  presses, which only follow the decision stimuli in those tasks — while TR's are visual (V2–V4); (3) dms's FIR
+  design is badly conditioned (median VIF 215 vs ≤ 25 for TR runs) because its timing is fixed and unjittered,
+  hence its ~11 s (one trial) oscillation. The real timing check stays the EVC positive control (pilot: 0.92).
+- **Partial-coverage runs** (new data problem): some runs have empty vertices (top of the brain outside the
+  field of view?). `glmsingle_fit.py` drops a vertex that is empty in ANY run, for all sessions:
+
+  | | fitted / ~58,790 | main cause | lost in decoding ROIs |
+  |---|---|---|---|
+  | sub-01 | 55,274 | ses-05 1back ctg (3,519 empty), ses-11 1back ctg (1,051) | DLPFC 30/4400, FrontalPole 45, OFC 5 |
+  | sub-02 | 55,460 | 50–500 per run in ses-01..09; ses-10 1back loc 2,787 | DLPFC 361/4400, IT 60/2385 |
+  | sub-03 | 58,604 | small, many runs | IT 5 |
+  | sub-05 | 58,699 | small | – |
+  | sub-06 | 58,774 | small | – |
+
+  Without its worst run sub-02 would lose 524 vertices instead of 3,311. **Decision pending with the user.**
+
 ## Phase 2 plan: conversion (`prep/convert_CNM/`)
 1. **`build_tree.py`** writes the mapping table and the tree. One row per run, with columns:
    - original log, design block, original BIDS name;
