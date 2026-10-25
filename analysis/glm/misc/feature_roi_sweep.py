@@ -94,7 +94,7 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser(description="Decode stimulus features from LSA/LSS betas across ROI groups")
     ap.add_argument("--sub", default="sub-01")
     ap.add_argument("--sessions", nargs="+", default=["ses-01", "ses-02", "ses-03", "ses-04"])
-    ap.add_argument("--glm_type", default="lsa", choices=["lsa", "lss", "glmsingle", "glmsingleB", "glmsingleC"])
+    ap.add_argument("--glm_type", default="lsa", help="model folder prefix: lsa, lss, glmsingle, glmsingleB, glmsingleC, ...")
     ap.add_argument("--glm_variant", default="wfdelay", help="events variant, e.g. wfdelay / wofdelay")
     ap.add_argument("--root", default="/mnt/tempdata/lucas/fmri/recordings/TR", help="dataset root (behav/, neural/)")
     ap.add_argument("--prep_run", default="first_run", help="folder under <root>/neural/fmriprep_outs")

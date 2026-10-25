@@ -291,6 +291,28 @@ it). 11,184 betas each for B, C, D. pcnum 2; median ridge frac 0.0066, 48% of ve
     same** (−1.0/−1.5 s, r 0.73), so the shift is the canonical HRF peaking late, not a CNM timing error.
   - Conclusion: timing and labels check out; the gap to TR is not from conversion errors found so far.
 
+**Old vs new betas, sub-01** (user's bar: CNM betas must beat the earlier trial-level betas in
+`fmri_dataset_project/data/encoding_delay/trial_level_betas`; per-run OLS by Xuan, every encoding and delay event
+incl. the 0.5 s pos-1 delay, delays as nominal 2.98 s blocks overlapping the next stimulus). Imported into our
+layout with `import_xuan_betas.py` (all 11,184 events matched by type + onset; run-N files, not the older run-0N
+WLS duplicates) and evaluated identically with `slurm_compare.sh` (single trials, dms excluded, demean+tuned,
+100 perms; outputs in `/home/lucasg/scratch/CNM/cmp_out/`):
+
+| encoding, balanced acc. | old (Xuan) | B | C | D |
+|---|---|---|---|---|
+| EVC loc | 0.56 | 0.90 | 0.90 | 0.90 |
+| VTC ctg | 0.52 | 0.81 | 0.81 | 0.87 |
+| VTC obj | 0.25 (ns) | 0.43 | 0.43 | 0.49 |
+| IT ctg | 0.50 (ns) | 0.50 (ns) | 0.50 (ns) | 0.60 |
+| DLPFC ctg | 0.50 (ns) | 0.51 (ns) | 0.51 (ns) | 0.54 |
+
+- Old betas are at chance almost everywhere (delay phase too); stimulus-key reliability EVC encoding 0.03 vs 0.31
+  (B) / 0.51 (D). Their delay betas decode the NEXT stimulus (EVC 0.75) better than the current one (0.51).
+- Not an import error: per event, old and our B betas correlate most strongly at the same event (r = −0.21; ≤ 0.05
+  at neighbours) — negatively, as expected from OLS on near-collinear encoding/delay regressors (VIF > 1,700,
+  decision #3). Their design-matrix timing is normal (regressor peak ~6 s after onset).
+- Our D beats B and C on every measure; B/C are close (C's 2 PCs change little).
+
 ## Phase 2 plan: conversion (`prep/convert_CNM/`)
 1. **`build_tree.py`** writes the mapping table and the tree. One row per run, with columns:
    - original log, design block, original BIDS name;
