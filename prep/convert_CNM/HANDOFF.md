@@ -272,6 +272,25 @@ Full sub-01 (11,184 trials, ~63k frames, ~20× TR's per-fit cost): estimated 15�
 
   Without its worst run sub-02 would lose 524 vertices instead of 3,311. **Decision pending with the user.**
 
+**Full sub-01 fit (finished 2026-10-25 00:42):** 24 h 53 min at 64 CPUs, peak RSS 188 GB (type D did not raise
+it). 11,184 betas each for B, C, D. pcnum 2; median ridge frac 0.0066, 48% of vertices at the floor (TR 0.015, 27%).
+
+**sub-01 evaluation** (single trials, dms excluded; `slurm_evaluate.sh`):
+- Leakage, EVC loc: D delay → next stimulus 0.79 (TR D: 0.93), B 0.69; encoding → previous 0.77 (D) / 0.72 (B),
+  1back only 0.69. CNM's longer delays (3.98 s) separate events better than TR's.
+- Reliability (repeat half-splits): stimulus key (102 conditions) EVC 0.51, VTC 0.59, IT 0.07, DLPFC 0.22
+  (≈0 after task×position removal); TR's stimulus-key EVC was 0.47. Trial key (464 conditions, mostly 2 repeats):
+  EVC 0.10, VTC 0.13.
+- **Positive control: EVC loc encoding = 0.90** (D and B), below TR's single-trial 0.975 — investigated
+  (`diag/loc_by_run.py`, `diag/timing_shift.py`):
+  - even across tasks (ctxdm 0.92, interdms 0.90, 1back 0.86) and positions (lowest: 1back pos 1, 0.78);
+  - runs: median 0.92 (IQR 0.86–0.97); three near chance: ses-10 1back loc 0.56, ses-11 ctxdm lco run-02 0.58,
+    ses-10 interdms loc_ABBA 0.61; their motion (mean FD 0.06–0.14) and log timing are normal;
+  - GLM-free timing test (EVC time series projected on the loc pattern from other runs, correlated with the
+    predicted signal for onset shifts −8..+8 s): CNM peaks at −1.0 s (median), r at 0 s median 0.74; **TR gives the
+    same** (−1.0/−1.5 s, r 0.73), so the shift is the canonical HRF peaking late, not a CNM timing error.
+  - Conclusion: timing and labels check out; the gap to TR is not from conversion errors found so far.
+
 ## Phase 2 plan: conversion (`prep/convert_CNM/`)
 1. **`build_tree.py`** writes the mapping table and the tree. One row per run, with columns:
    - original log, design block, original BIDS name;
