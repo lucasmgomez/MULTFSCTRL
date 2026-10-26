@@ -314,9 +314,17 @@ WLS duplicates) and evaluated identically with `slurm_compare.sh` (single trials
 - Our D beats B and C on every measure; B/C are close (C's 2 PCs change little).
 
 **Other subjects (2026-10-26):** user approved. sub-03, 05, 06 submitted (jobs 25191440/2/3; 55 CPUs, 220 GB,
-billed as 55 cores; outputs B, C, D under the CNM root; ctb-bashivan files ~318K → ~420K of 500K). They wait for
-Rorqual's full-cluster maintenance (POWEROUT20261027: 2026-10-27 05:00 → 2026-11-03 04:00): a ~25 h fit can't
-finish before it, so they start after it. sub-02 waits for the user's decision on its ses-10 1back loc run, which
+billed as 55 cores; outputs B, C, D under the CNM root; ctb-bashivan files ~318K → ~420K of 500K). Rorqual's full-cluster maintenance (POWEROUT20261027: 2026-10-27 05:00 →
+2026-11-03 04:00) blocked them, so **the user cancelled them (never started) and will run the remaining fits on
+another machine.** What a fit needs there (per subject):
+  - inputs: `CNM/behav/<sub>/` (logs, `_scored.tsv`, `events_wfdelay/`) and
+    `CNM/neural/fmriprep_outs/fmriprep_20.2.6/{64kDense,confounds}/<sub>/` (~4.6 GB per subject);
+  - code: this branch; GLMsingle = GitHub `main` @ `1ab54a6` (NOT the `1.2` tag), numpy 2.x;
+  - `glmsingle_fit.py --sub <sub> --sessions ses-01 ... ses-16 --neural_base <...>/fmriprep_20.2.6 --behav_base <...>/behav
+     --events_variant wfdelay --add_fd --start_time 0.686 --save_types B C D --output_root <...>/glm_runs --raw_dir <scratch>`
+    (as `slurm_glmsingle.sh` does);
+  - measured on sub-01: 24 h 53 min, peak RSS 188 GB, ~15 cores busy on average (64 allocated);
+  - outputs ~33.5k files / ~9 GB per subject (B, C, D), plus ~11 GB of GLMsingle raw outputs in `--raw_dir`. sub-02 waits for the user's decision on its ses-10 1back loc run, which
 has 2,787 empty vertices (dorsal motor/premotor/SFL: top of the brain outside the volume), is sub-02's
 highest-motion run (FD 0.26 vs median 0.16; 23/188 volumes > 0.5 mm) and has lower tSNR (72 vs 91).
 
