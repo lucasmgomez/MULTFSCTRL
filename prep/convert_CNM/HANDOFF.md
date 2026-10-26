@@ -378,6 +378,13 @@ trials, sub-03 and sub-06 112 / 11,184, sub-05 110 / 11,008.
   - `--start_time 0.686` is given on the command line, no code change.
 - **TR checks:** after each shared-code change, run TR's `glmsingle_fit.py --dry_run` and compare its manifest with the saved one, and run one small decoding job and compare with the saved `_decoding_roi` TSVs.
 
+**Narval (2026-10-26):** package unpacked at `/home/lucasg/scratch/cnm_glmsingle` (= `/lustre07/scratch/lucasg`);
+all 2,226 data files match `FILES.tsv`. Code = this repo at c8014f5 (`run_fit.sh` now takes `CODE=<repo>`; the package's
+`code/MULTFSCTRL` is absent). Venv `~/envs/fmri_glm` (`module load python/3.11`, `virtualenv --no-download`, same versions
+as Rorqual, GLMsingle from the package's 1ab54a6 source); run with `PYTHONNOUSERSITE=1`. Dry runs match the README exactly.
+Fits submitted (account `rrg-bashivan_cpu`, 55 CPUs, 220 GB, 2 days): sub-02 7424708, sub-03 7424712, sub-05 7424714,
+sub-06 7424716; logs `out/logs/`, outputs `out/glm_runs/*_wfdelay/64kDense/<sub>/`.
+
 ## Phase 4 plan: fit and validate
 - **Dry run:**
   ```
