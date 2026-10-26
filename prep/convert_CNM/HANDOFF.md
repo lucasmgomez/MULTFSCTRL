@@ -313,6 +313,13 @@ WLS duplicates) and evaluated identically with `slurm_compare.sh` (single trials
   decision #3). Their design-matrix timing is normal (regressor peak ~6 s after onset).
 - Our D beats B and C on every measure; B/C are close (C's 2 PCs change little).
 
+**Other subjects (2026-10-26):** user approved. sub-03, 05, 06 submitted (jobs 25191440/2/3; 55 CPUs, 220 GB,
+billed as 55 cores; outputs B, C, D under the CNM root; ctb-bashivan files ~318K → ~420K of 500K). They wait for
+Rorqual's full-cluster maintenance (POWEROUT20261027: 2026-10-27 05:00 → 2026-11-03 04:00): a ~25 h fit can't
+finish before it, so they start after it. sub-02 waits for the user's decision on its ses-10 1back loc run, which
+has 2,787 empty vertices (dorsal motor/premotor/SFL: top of the brain outside the volume), is sub-02's
+highest-motion run (FD 0.26 vs median 0.16; 23/188 volumes > 0.5 mm) and has lower tSNR (72 vs 91).
+
 ## Phase 2 plan: conversion (`prep/convert_CNM/`)
 1. **`build_tree.py`** writes the mapping table and the tree. One row per run, with columns:
    - original log, design block, original BIDS name;
