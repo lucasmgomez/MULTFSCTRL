@@ -18,7 +18,8 @@ rm -rf "$OUTDIR/stage"; mkdir -p "$ST/code" "$ST/data/behav" "$ST/data/neural/fm
 # code: repo at HEAD (committed state only) + GLMsingle source at the pinned commit
 mkdir -p "$ST/code/MULTFSCTRL"; git -C $REPO archive HEAD | tar -x -C "$ST/code/MULTFSCTRL"
 git -C $REPO rev-parse HEAD > "$ST/code/COMMIT"
-TMPG=$OUTDIR/glmsingle_src; rm -rf "$TMPG"; git clone -q https://github.com/cvnlab/GLMsingle "$TMPG"
+TMPG=${GLMSINGLE_SRC:-/home/lucasg/scratch/CNM/glmsingle_src}   # a local clone (compute nodes have no internet)
+[ -d "$TMPG" ] || { echo "clone https://github.com/cvnlab/GLMsingle to $TMPG first (login node)"; exit 1; }
 mkdir -p "$ST/code/GLMsingle-1ab54a6"; git -C "$TMPG" archive $GLMS_COMMIT | tar -x -C "$ST/code/GLMsingle-1ab54a6"
 cp $REPO/prep/convert_CNM/package/{README.md,run_fit.sh} "$ST/"
 cat > "$ST/requirements.txt" <<'EOF'
