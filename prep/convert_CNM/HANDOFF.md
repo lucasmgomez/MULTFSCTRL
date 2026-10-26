@@ -328,6 +328,17 @@ another machine.** What a fit needs there (per subject):
 has 2,787 empty vertices (dorsal motor/premotor/SFL: top of the brain outside the volume), is sub-02's
 highest-motion run (FD 0.26 vs median 0.16; 23/188 volumes > 0.5 mm) and has lower tSNR (72 vs 91).
 
+**Scratch location fix (2026-10-26):** `/home/lucasg/scratch` was a plain folder in /home (50 GB quota), not the
+scratch filesystem; everything written there (pilot, raw GLMsingle files, comparisons, logs) filled /home while
+building the package. It was moved to the real scratch `/scratch/lucasg/CNM` ($SCRATCH; purged after inactivity) and
+`/home/lucasg/scratch` is now a symlink to `/scratch/lucasg`, so all `/home/lucasg/scratch/CNM/...` paths in this
+file and the scripts still resolve there.
+
+**Package for running elsewhere:** `sbatch make_package.sh /scratch/lucasg/CNM/package` →
+`cnm_glmsingle.tar` (+ `.sha256`): code at HEAD, GLMsingle source @ 1ab54a6, inputs for sub-02/03/05/06 with
+sub-02 ses-10 1back loc left out, `run_fit.sh`, README. Dry runs from the staged tree: sub-02 111 runs / 11,085
+trials, sub-03 and sub-06 112 / 11,184, sub-05 110 / 11,008.
+
 ## Phase 2 plan: conversion (`prep/convert_CNM/`)
 1. **`build_tree.py`** writes the mapping table and the tree. One row per run, with columns:
    - original log, design block, original BIDS name;
