@@ -324,7 +324,7 @@ another machine.** What a fit needs there (per subject):
      --events_variant wfdelay --add_fd --start_time 0.686 --save_types B C D --output_root <...>/glm_runs --raw_dir <scratch>`
     (as `slurm_glmsingle.sh` does);
   - measured on sub-01: 24 h 53 min, peak RSS 188 GB, ~15 cores busy on average (64 allocated);
-  - outputs ~33.5k files / ~9 GB per subject (B, C, D), plus ~11 GB of GLMsingle raw outputs in `--raw_dir`. sub-02 waits for the user's decision on its ses-10 1back loc run, which
+  - outputs ~33.5k files / ~9 GB per subject (B, C, D), plus ~11 GB of GLMsingle raw outputs in `--raw_dir`. sub-02: **user decided to drop its ses-10 1back loc run** (noted in CLAUDE.md, not yet applied to the tree); the run
 has 2,787 empty vertices (dorsal motor/premotor/SFL: top of the brain outside the volume), is sub-02's
 highest-motion run (FD 0.26 vs median 0.16; 23/188 volumes > 0.5 mm) and has lower tSNR (72 vs 91).
 

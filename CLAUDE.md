@@ -180,6 +180,17 @@ few code changes as possible.
 
 In progress for the CNeuroMod multfs dataset (CNM): see `prep/convert_CNM/HANDOFF.md`.
 
+**CNM run to drop (decided 2026-10-26): sub-02 ses-10 `1back` loc run-01** (original
+`sub-02_ses-010_task-1back_run-01`). Leave it out of every sub-02 GLM fit.
+- Why: it has 2,787 empty vertices (dorsal motor/premotor/SFL, likely outside the scanned volume). `glmsingle_fit.py`
+  fits only vertices present in every run, so keeping it removes them from all of sub-02, including 361 of 4,400
+  DLPFC vertices. It is also sub-02's highest-motion run (mean FD 0.26 mm vs median 0.16) with lower tSNR.
+- Cost: 9 1back trials, which never repeat across sessions, so GLMsingle's tuning is unaffected.
+- **Not yet applied to the tree**: it is still `include=1` in `CNM/mapping.csv` and its files are in the tree. To
+  apply, mark it excluded in `prep/convert_CNM/build_tree.py` and remove its block log, scored log and
+  `events_wfdelay/task-1back_loc_run-01_base-events.tsv` (+ `_LSA/`) from `CNM/behav/sub-02/ses-10/` (the GLM finds
+  runs through the base events), then rerun `check_tree.py`.
+
 ### Ground rules
 - Never write into `/mnt/tempdata/lucas/fmri/recordings/TR`. Give the new dataset a parallel root,
   e.g. `/mnt/tempdata/lucas/fmri/recordings/<ID>/{behav,neural}`, mirroring TR's tree exactly.
