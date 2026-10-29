@@ -83,7 +83,12 @@ def parse_args():
                         "runtime (every refit is per chunk) for ~5 GB more RAM.")
     p.add_argument("--save_types", nargs="+", default=["D"], choices=["B", "C", "D"],
                    help="Model types whose single-trial betas are written as dscalars "
-                        "(B: library HRF, C: + GLMdenoise, D: + ridge; default D).")
+                        "(B: library HRF, C: + GLMdenoise, D: + ridge; default D). Type D (ridge) is fitted "
+                        "only when listed; without it the fit summary comes from type C (or B).")
+    p.add_argument("--pcstop", type=int, default=None,
+                   help="GLMsingle pcstop. Default: GLMsingle's (cross-validate the number of GLMdenoise PCs). "
+                        "-B uses B PCs and skips that cross-validation, e.g. to split a long fit in two jobs: "
+                        "--save_types B C, then --save_types D --pcstop -<pcnum from the first fit's summary>.")
 
     p.add_argument("--output_root", default=None,
                    help="Root for outputs (default <neural_base>/glm_runs). Model folders are created inside.")
@@ -376,15 +381,17 @@ def main():
     # held-out runs per fold (default one fold per session); GLMsingle needs each fold as an array
     fold_of_run = np.array([r["fold"] for r in runs])
     xvalscheme = [np.flatnonzero(fold_of_run == k) for k in range(n_folds)]
-    want = [0, int("B" in args.save_types), int("C" in args.save_types), 1]
+    want = [0, int("B" in args.save_types), int("C" in args.save_types), int("D" in args.save_types)]
     params = {
-        "wantlibrary": 1, "wantglmdenoise": 1, "wantfracridge": 1,
+        "wantlibrary": 1, "wantglmdenoise": int(want[2] or want[3]), "wantfracridge": want[3],
         "xvalscheme": xvalscheme, "sessionindicator": np.array([ses_num]),
         "extra_regressors": extra, "n_pcs": args.n_pcs, "chunklen": args.chunklen,
         "fracs": np.geomspace(1, args.fracs_min, args.n_fracs),
         "wantfileoutputs": [0, 0, 0, 0], "wantmemoryoutputs": want,
         "seed": 0,
     }
+    if args.pcstop is not None:
+        params["pcstop"] = args.pcstop
     if len(sessions) < 2:
         raise RuntimeError("Need >= 2 sessions: repeats across sessions drive GLMsingle's cross-validation.")
     print(f"Fitting GLMsingle: stimdur={args.stimdur}s, tr={dt_up:.4f}s, folds={len(xvalscheme)} (sessions)")
@@ -403,10 +410,15 @@ def main():
     summary = {"n_runs": len(runs), "n_trials": int(len(manifest)), "n_conditions": len(cond_keys),
                "upsample": args.upsample, "tr_model": dt_up, "stimdur": args.stimdur,
                "events_variant": args.events_variant, "vertices_fitted": int(valid.sum())}
-    res_d = results[key["D"]]
+    fitted = [T for T in "DCB" if T in args.save_types]
+    if fitted[0] != "D":
+        summary["summary_type"] = fitted[0]
+    if args.pcstop is not None:
+        summary["pcstop"] = args.pcstop
+    res_d = results[key[fitted[0]]]
     if "pcnum" in res_d:
         summary["pcnum"] = int(np.asarray(res_d["pcnum"]).squeeze())
-    if "FRACvalue" in res_d:
+    if "FRACvalue" in res_d and fitted[0] == "D":
         fr = np.asarray(res_d["FRACvalue"]).reshape(-1)
         summary["fracvalue_median"] = float(np.median(fr))
         summary["frac_at_floor"] = float(np.mean(fr <= args.fracs_min + 1e-6))
