@@ -385,6 +385,29 @@ as Rorqual, GLMsingle from the package's 1ab54a6 source); run with `PYTHONNOUSER
 Fits submitted (account `rrg-bashivan_cpu`, 55 CPUs, 220 GB, 2 days): sub-02 7424708, sub-03 7424712, sub-05 7424714,
 sub-06 7424716; logs `out/logs/`, outputs `out/glm_runs/*_wfdelay/64kDense/<sub>/`.
 
+**Trillium (2026-10-29):** Narval's compute nodes went down too, so the fits run on Trillium. Package at
+`/scratch/lucasg/wm_fmri/cnm_glmsingle` (Globus copy of the Narval one; its `code/MULTFSCTRL` is this repo); all
+2,226 data files match `FILES.tsv`. Venv `~/envs/fmri_glm` built as on Narval: same versions as Rorqual (numpy 2.4.2,
+scipy 1.16.2, ...), GLMsingle from the package's 1ab54a6 source. Dry runs are identical to Narval's
+(sub-02 111 runs / 11,085 trials, sub-03 and sub-06 112 / 11,184, sub-05 110 / 11,008; max onset error ≤ 0.225 s).
+- **Limits:** compute partitions have a hard **24 h** limit, and jobs get whole nodes only (192 cores, ~767 GB, no `--mem`).
+  Account `def-bashivan`. `$HOME` is read-only on compute nodes, so submit from scratch and write logs there.
+- **Deviation, two-stage fit (user-approved):** sub-01's single fit took 24 h 53 min, so each subject runs in two
+  jobs. Stage 1 runs `--save_types B C` (library HRF + GLMdenoise PC cross-validation → pcnum). Stage 2 runs
+  `--save_types D --pcstop -<pcnum>`, which skips the PC cross-validation (7 h 44 on sub-01); the noise pool and PCs
+  don't depend on pcstop. `glmsingle_fit.py` gained `--pcstop` and fits D only when D is saved (commit 11ca674;
+  defaults unchanged). Smoke test (sub-03, ses-01..04, ctxdm + interdms loc, 1,360 trials, `out/smoke/`): staged B, C
+  and D betas are **bit-identical** (max |diff| 0) to one B C D fit, with the same summary. TR checks were not run
+  (TR data isn't on Trillium). The change sits after the dry-run exit, and TR's call (`--save_types` with D) takes
+  the unchanged path.
+- **numba:** fracridge's numba JIT caches next to its source, i.e. in the read-only venv, and crashes on compute
+  nodes. Set `NUMBA_CACHE_DIR` to scratch (the launcher does).
+- **Jobs** (`prep/convert_CNM/slurm_trillium_pair.sh`, 2 subjects per node at 96 threads each, 24 h; stage 2 is
+  `afterok` on stage 1 and reads pcnum from `glmsingleB_wfdelay/64kDense/<sub>/_glmsingle/glmsingle_fit_summary.json`):
+  sub-02 + sub-03 stage 1 2694843 → stage 2 2694844; sub-05 + sub-06 stage 1 2694845 → stage 2 2694846. Logs
+  `out/logs/<sub>_stage<N>_<jobid>.log`; GLMsingle raw outputs `out/glmsingle_raw/<sub>_stage<N>/`. The summary with
+  the ridge fraction (type D) is in `glmsingle_wfdelay/.../_glmsingle/`; stage 1's (pcnum) is in `glmsingleB_wfdelay/.../_glmsingle/`.
+
 ## Phase 4 plan: fit and validate
 - **Dry run:**
   ```
