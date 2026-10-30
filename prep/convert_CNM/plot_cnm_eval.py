@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Cross-subject figures for the CNM evaluation (outputs of slurm_evaluate.sh and diag/loc_by_run.py).
   python plot_cnm_eval.py --glm_runs <.../glm_runs> --subs sub-02 sub-03 sub-05 sub-06 --out_dir <dir>
-Figures (one panel per subject; ROI groups DLPFC, EVC, VTC, IT):
+Figures (one panel per subject; ROI groups DLPFC, IFC (= VLPFC), EVC, VTC, IT, whichever have results; extra ROI
+groups from slurm_trillium_rois.sh are picked up automatically):
   noise_ceiling_<key>_<demean>.png      split-half noise ceiling, per-vertex vs ROI-mean signal (Encoding, Delay)
   noise_ceiling_parcels_<key>.png       per-vertex noise ceiling of every bilateral parcel (heatmap)
   decoding_<phase>_<config>.png         balanced accuracy for loc / ctg / obj, vertex patterns vs ROI mean
@@ -26,7 +27,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "../
 from plot_roi_decoding import PALETTE, INK, INK_2, GRID, fdr_bh, stars, FEATURE_LABELS
 from feature_roi_sweep import ROI_GROUPS
 
-GROUPS = ["DLPFC", "EVC", "VTC", "IT"]
+GROUPS = ["DLPFC", "IFC", "EVC", "VTC", "IT"]  # display order; a figure shows the groups present in its data
 PHASES = ["Encoding", "Delay"]
 # two-series slots (blue / orange): validated all-pairs; ROI groups use the first four slots on adjacent bars only
 SERIES = {"vertex": PALETTE[0], "mean": PALETTE[1]}
@@ -62,15 +63,26 @@ def save(fig, path, title, caption, handles=None):
     print(f"[SAVED] {path}")
 
 
-def read_all(pattern_by_sub):
+def read_all(pattern_by_sub, exclude=None):
+    """Every file matching each subject's glob(s) (main ROI set and extra ROI runs), minus names containing exclude."""
     frames = []
-    for sub, pat in pattern_by_sub.items():
-        files = sorted(glob.glob(pat))
-        if len(files) != 1:
-            print(f"[WARN] {sub}: {len(files)} files for {pat}")
-            continue
-        frames.append(pd.read_csv(files[0], sep="\t").assign(sub=sub))
+    for sub, pats in pattern_by_sub.items():
+        pats = [pats] if isinstance(pats, str) else pats
+        files = sorted({f for p in pats for f in glob.glob(p) if not (exclude and exclude in os.path.basename(f))})
+        if not files:
+            print(f"[WARN] {sub}: no files for {pats}")
+        frames += [pd.read_csv(f, sep="\t").assign(sub=sub) for f in files]
     return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+
+
+def present(df, col="roi"):
+    """ROI groups in display order that have rows in df (group level, or the 'group' column for parcels)."""
+    have = set(df[col])
+    return [g for g in GROUPS if g in have]
+
+
+def panel_width(groups):
+    return 0.55 * len(groups) + 0.4
 
 
 def paired_bars(ax, d, value, groups, top, err=None, chance=None, q=None):
@@ -98,14 +110,15 @@ def fig_noise_ceiling(rel, subs, key, demean, out_dir):
     d0 = rel[(rel["key"] == key) & (rel["demean"] == demean) & (rel["level"] == "group")]
     if d0.empty:
         return
-    fig, axes = plt.subplots(len(PHASES), len(subs), figsize=(2.5 * len(subs) + 0.6, 2.4 * len(PHASES) + 0.9),
-                             sharey=True, squeeze=False)
+    groups = present(d0)
+    fig, axes = plt.subplots(len(PHASES), len(subs), figsize=(panel_width(groups) * len(subs) + 0.6,
+                                                               2.4 * len(PHASES) + 0.9), sharey=True, squeeze=False)
     top = min(1.0, d0["noise_ceiling"].max() + 0.08)
     for i, ph in enumerate(PHASES):
         for j, sub in enumerate(subs):
             ax = axes[i, j]
             d = d0[(d0["phase"] == ph) & (d0["sub"] == sub)]
-            paired_bars(ax, d, "noise_ceiling", GROUPS, top)
+            paired_bars(ax, d, "noise_ceiling", groups, top)
             if i == 0:
                 ax.set_title(sub, fontsize=10, fontweight="bold")
             if j == 0:
@@ -127,7 +140,8 @@ def fig_noise_ceiling_parcels(rel, subs, key, out_dir):
     d0 = rel[(rel["key"] == key) & (rel["demean"] == "none") & (rel["level"] == "parcel") & (rel["reduce"] == "vertex")]
     if d0.empty:
         return
-    parcels = [p for g in GROUPS for p in ROI_GROUPS[g]]
+    groups = present(d0, "group")
+    parcels = [p for g in groups for p in ROI_GROUPS[g]]
     cols = [(ph, s) for ph in PHASES for s in subs]
     M = np.array([[d0[(d0["roi"] == p) & (d0["phase"] == ph) & (d0["sub"] == s)]["noise_ceiling"].mean()
                    for ph, s in cols] for p in parcels])
@@ -144,14 +158,14 @@ def fig_noise_ceiling_parcels(rel, subs, key, out_dir):
     ax.tick_params(length=0)
     for s in ax.spines.values():
         s.set_visible(False)
-    edges = np.cumsum([len(ROI_GROUPS[g]) for g in GROUPS])[:-1] - 0.5
+    edges = np.cumsum([len(ROI_GROUPS[g]) for g in groups])[:-1] - 0.5
     for e in edges:
         ax.axhline(e, color="white", linewidth=3)
     ax.axvline(len(subs) - 0.5, color="white", linewidth=4)
     for k, ph in enumerate(PHASES):
         ax.text(k * len(subs) + (len(subs) - 1) / 2, -0.9, ph, ha="center", va="bottom", fontsize=9, fontweight="bold")
     starts = np.r_[0, edges + 0.5]
-    for g, st in zip(GROUPS, starts):
+    for g, st in zip(groups, starts):
         ax.annotate(g, xy=(0, st + (len(ROI_GROUPS[g]) - 1) / 2), xycoords=("axes fraction", "data"), xytext=(-48, 0),
                     textcoords="offset points", ha="right", va="center", fontsize=9, fontweight="bold")
     cb = fig.colorbar(im, ax=ax, fraction=0.035, pad=0.02)
@@ -173,14 +187,15 @@ def fig_decoding(dec, subs, phase, config, out_dir):
         q = pd.Series(fdr_bh(allp["p"].to_numpy()), index=allp.index)
         d0.loc[d0.index.intersection(q.index), "q"] = q
     feats = [f for f in ("loc", "ctg", "obj") if f in set(d0["feature"])]
-    fig, axes = plt.subplots(len(feats), len(subs), figsize=(2.5 * len(subs) + 0.6, 2.3 * len(feats) + 0.9),
-                             sharey="row", squeeze=False)
+    groups = present(d0)
+    fig, axes = plt.subplots(len(feats), len(subs), figsize=(panel_width(groups) * len(subs) + 0.6,
+                                                              2.3 * len(feats) + 0.9), sharey="row", squeeze=False)
     for i, f in enumerate(feats):
         df = d0[d0["feature"] == f]
         top = min(1.0, (df["bacc"] + df["bacc_sd"]).max() + 0.1)
         for j, sub in enumerate(subs):
             ax = axes[i, j]
-            paired_bars(ax, df[df["sub"] == sub], "bacc", GROUPS, top, err="bacc_sd", chance=True, q="q")
+            paired_bars(ax, df[df["sub"] == sub], "bacc", groups, top, err="bacc_sd", chance=True, q="q")
             if i == 0:
                 ax.set_title(sub, fontsize=10, fontweight="bold")
             if j == 0:
@@ -248,18 +263,19 @@ def fig_loc_by_run(lbr, subs, out_dir):
         m = lbr[lbr["sub"] == sub]
         r = m.groupby(["ses", "task", "acq", "run"]).ok.agg(["mean", "size"]).reset_index()
         r["s"] = r["ses"].str[-2:].astype(int)
-        rng = np.random.default_rng(0)
+        r["x"] = r["s"] + np.random.default_rng(0).uniform(-0.22, 0.22, len(r))
         for t, c in TASK_COLOR.items():
             rt = r[r["task"] == t]
-            ax.scatter(rt["s"] + rng.uniform(-0.22, 0.22, len(rt)), rt["mean"], s=22, color=c, edgecolor="white",
+            ax.scatter(rt["x"], rt["mean"], s=22, color=c, edgecolor="white",
                        linewidth=0.8, zorder=3, label=t)
         sm = m.groupby("ses").ok.mean()
         ax.plot([int(s[-2:]) for s in sm.index], sm.values, color=INK, linewidth=2, zorder=4)
         ax.axhline(0.5, color=INK_2, linestyle=(0, (3, 1.5)), linewidth=1.0, zorder=1)
-        for _, w in r.nsmallest(3, "mean").iterrows():
-            if w["mean"] < 0.7:
-                ax.annotate(f"{w['task']} {w['acq']} r{int(w['run'])}", (w["s"], w["mean"]), xytext=(5, -2),
-                            textcoords="offset points", fontsize=6.5, color=INK_2, va="top")
+        weak = r[r["mean"] < 0.7].sort_values("mean")
+        ax.scatter(weak["x"], weak["mean"], s=90, facecolor="none", edgecolor=INK, linewidth=1.1, zorder=5)
+        if len(weak):
+            ax.set_title("< 0.7: " + "; ".join(f"ses-{w.s:02d} {w.task} {w.acq} r{int(w.run)} ({w['mean']:.2f})"
+                                               for _, w in weak.iterrows()), loc="right", fontsize=7, color=INK_2)
         ax.set_ylim(0.2, 1.02)
         ax.set_ylabel("EVC loc acc.")
         ax.set_title(f"{sub} · overall {m.ok.mean():.2f} (n = {len(m)})", loc="left", fontsize=9.5, fontweight="bold")
@@ -272,8 +288,8 @@ def fig_loc_by_run(lbr, subs, out_dir):
                Line2D([], [], color=INK_2, linestyle=(0, (3, 1.5)), label="Chance")]
     save(fig, os.path.join(out_dir, "loc_by_run.png"), "Positive control by run · EVC location decoding (encoding)",
          "Cross-validated (5-fold grouped by trial, task × position means removed, RidgeClassifierCV) prediction of "
-         "each encoding event's location; dots = runs, line = session mean. Runs < 0.7 among each subject's 3 "
-         "worst are labelled.", handles)
+         "each encoding event's location; dots = runs (jittered), line = session mean. Ringed runs are below 0.7 and "
+         "listed above their panel.", handles)
 
 
 if __name__ == "__main__":
@@ -287,8 +303,8 @@ if __name__ == "__main__":
     setup()
     G = lambda gt, sub: f"{args.glm_runs}/{gt}_{args.variant}/64kDense/{sub}"
 
-    rel = pd.concat([read_all({s: f"{G('glmsingle', s)}/_reliability_pattern/pattern_split_half_reliability_excl-dms"
-                                  f"_split-repeats_key-{k}.tsv" for s in args.subs}).assign(key=k)
+    rel = pd.concat([read_all({s: [f"{G('glmsingle', s)}/_reliability_pattern/{d}pattern_split_half_reliability_excl-dms"
+                                   f"_split-repeats_key-{k}.tsv" for d in ("", "rois-*/")] for s in args.subs}).assign(key=k)
                      for k in ("stimulus", "trial")], ignore_index=True)
     if not rel.empty:
         for k in ("stimulus", "trial"):
@@ -296,9 +312,10 @@ if __name__ == "__main__":
                 fig_noise_ceiling(rel, args.subs, k, dm, args.out_dir)
             fig_noise_ceiling_parcels(rel, args.subs, k, args.out_dir)
 
+    # main ROI set and extra ROI runs (group-parcels-<groups>); vertex files are the ones without _reduce-
     dec = pd.concat([read_all({s: f"{G('glmsingle', s)}/_decoding_roi/roi_decoding_glmsingle_{args.variant}_{f}"
-                                  f"_excl-dms_rep-single_group-parcels-DLPFC-EVC-VTC-IT{red}_cfg-*.tsv"
-                               for s in args.subs})
+                                  f"_excl-dms_rep-single_group-parcels-*{red}_cfg-*.tsv" for s in args.subs},
+                              exclude=None if red else "_reduce-")
                      for f in ("loc", "ctg", "obj") for red in ("", "_reduce-mean")], ignore_index=True)
     if not dec.empty:
         for ph in PHASES:
