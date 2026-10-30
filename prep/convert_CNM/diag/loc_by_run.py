@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """Positive-control breakdown: cross-validated EVC location decoding (single trials, encoding) per task, position,
 session and run. A timing/label problem confined to some runs, sessions or tasks shows up as accuracy dropping there.
-  python loc_by_run.py <sub> <glm_type> [variant] [roi]"""
-import io, contextlib, sys
+  python loc_by_run.py <sub> <glm_type> [variant] [roi]
+Env: CNM_ROOT (dataset root; default Rorqual's CNM); LOC_BY_RUN_OUT (optional TSV of per-event correctness)."""
+import io, contextlib, os, sys
 import numpy as np, pandas as pd
-sys.path.insert(0, "/home/lucasg/projects/MULTFSCTRL/analysis/glm/misc")
+REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
+sys.path.insert(0, f"{REPO}/analysis/glm/misc")
 from feature import collect_one_session_dict
 from feature_roi_sweep import ROI_GROUPS, ALPHA_GRID, bilateral
 from sklearn.linear_model import RidgeClassifierCV
@@ -14,7 +16,7 @@ from sklearn.preprocessing import StandardScaler
 sub, gt = sys.argv[1], sys.argv[2]
 var = sys.argv[3] if len(sys.argv) > 3 else "wfdelay"
 roi = sys.argv[4] if len(sys.argv) > 4 else "EVC"
-R = "/home/lucasg/links/projects/ctb-bashivan/lucasg/trevor_ctrl/CNM"
+R = os.environ.get("CNM_ROOT", "/home/lucasg/links/projects/ctb-bashivan/lucasg/trevor_ctrl/CNM")
 X, rows = [], []
 for s in range(1, 17):
     ses = f"ses-{s:02d}"
@@ -22,7 +24,7 @@ for s in range(1, 17):
         d, meta, _ = collect_one_session_dict(
             glm_base_dir=f"{R}/neural/fmriprep_outs/fmriprep_20.2.6/glm_runs/{gt}_{var}/64kDense", behav_base=f"{R}/behav",
             events_subdir=f"events_{var}", block_logs_dir=f"{R}/behav/{sub}/{ses}", sub=sub, session=ses,
-            dlabel_path="/home/lucasg/projects/MULTFSCTRL/prep/fmriprep/Glasser_LR_Dense64k.dlabel.nii",
+            dlabel_path=f"{REPO}/prep/fmriprep/Glasser_LR_Dense64k.dlabel.nii",
             roi_names=bilateral(ROI_GROUPS[roi]), feature_to_decode="loc", phase_to_decode="Encoding",
             exclude_tasks=["dms"], unique_key=True)
     for k in sorted(d):
@@ -40,6 +42,8 @@ for tr, te in StratifiedGroupKFold(5, shuffle=True, random_state=0).split(X, m.y
     clf = RidgeClassifierCV(alphas=ALPHA_GRID).fit(sc.transform(Xtr), m.y[tr])
     pred[te] = clf.predict(sc.transform(Xte))
 m["ok"] = pred == m.y
+if os.environ.get("LOC_BY_RUN_OUT"):
+    m.to_csv(os.environ["LOC_BY_RUN_OUT"], sep="\t", index=False)
 pd.set_option("display.width", 200)
 print(f"{sub} {gt}_{var} {roi} loc encoding, overall accuracy {m.ok.mean():.3f} (n={len(m)})")
 print(m.groupby("task").ok.mean().round(3).to_dict())

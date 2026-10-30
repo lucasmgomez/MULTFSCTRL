@@ -5,12 +5,15 @@
 #   step: leakage | reliability | sweep-<feature> (loc, ctg or obj) | plots
 # Single-trial betas (--repeat_mode single), dms left out of decoding (HANDOFF.md decisions #5, #6).
 # Outputs go to <glm>/64kDense/<sub>/_decoding_roi and _reliability_pattern (the scripts' defaults).
-# Env overrides (smoke tests): CNM_ROOT (dataset root), SESSIONS (space-separated; default all of the subject's).
+# Env overrides (smoke tests): CNM_ROOT (dataset root), SESSIONS (space-separated; default all of the subject's),
+# REPO (repo checkout), REDUCE (sweep input: vertex (default), mean or hemi_mean).
+# Trillium: sbatch --account=def-bashivan --nodes=1 --cpus-per-task=192 ... with REPO and CNM_ROOT set.
 set -euo pipefail
 SUB=$1; GT=$2; VAR=$3; STEP=$4; NPERM=${5:-1000}
 N=${SLURM_CPUS_PER_TASK:-8}
 export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 FLEXIBLAS_NUM_THREADS=1
-REPO=/home/lucasg/projects/MULTFSCTRL
+REPO=${REPO:-/home/lucasg/projects/MULTFSCTRL}
+REDUCE=${REDUCE:-vertex}
 CNM=${CNM_ROOT:-/home/lucasg/links/projects/ctb-bashivan/lucasg/trevor_ctrl/CNM}
 PY=~/envs/fmri_glm/bin/python
 DL=$REPO/prep/fmriprep/Glasser_LR_Dense64k.dlabel.nii
@@ -35,7 +38,7 @@ case $STEP in
   sweep-*)
     $PY feature_roi_sweep.py $C --features ${STEP#sweep-} --rois DLPFC EVC VTC IT --levels group parcel \
       --configs tuned demean_pos+tuned demean+tuned --n_perm $NPERM --n_jobs $N \
-      --repeat_mode single --exclude_tasks dms ;;
+      --repeat_mode single --exclude_tasks dms --reduce $REDUCE ;;
   plots)
     T=$(ls $OUT/roi_decoding_${GT}_${VAR}_{loc,ctg,obj}_excl-dms_rep-single_group-parcels-DLPFC-EVC-VTC-IT_cfg-tuned-demean_postuned-demeantuned.tsv)
     for spec in "demean+tuned 1-taskpos-removed" "demean_pos+tuned 2-pos-removed" "tuned 3-nothing-removed"; do
