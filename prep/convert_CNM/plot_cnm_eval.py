@@ -222,8 +222,8 @@ def fig_decoding(dec, subs, phase, config, out_dir):
          f"Feature decoding · {phase} · {config}",
          "Single-trial GLMsingle D betas, dms excluded; kernel ridge classifier, 5-fold CV grouped by trial, alpha tuned "
          "by nested CV. Error bars: SD over folds. Black tick: 95th percentile of the 1000-permutation null (labels "
-         "shuffled, alpha re-tuned each time), the accuracy to beat. * q<.05 ** q<.01 *** q<.001 (permutation p, "
-         "BH-FDR within subject).",
+         "shuffled, alpha re-tuned each time), the accuracy to beat. * q<.05 ** q<.01 (permutation p, BH-FDR within "
+         "subject; with 1000 permutations p ≥ 1/1001, so ** is the strongest level reachable).",
          handles)
 
 
