@@ -407,6 +407,18 @@ scipy 1.16.2, ...), GLMsingle from the package's 1ab54a6 source. Dry runs are id
   sub-02 + sub-03 stage 1 2694843 → stage 2 2694844; sub-05 + sub-06 stage 1 2694845 → stage 2 2694846. Logs
   `out/logs/<sub>_stage<N>_<jobid>.log`; GLMsingle raw outputs `out/glmsingle_raw/<sub>_stage<N>/`. The summary with
   the ridge fraction (type D) is in `glmsingle_wfdelay/.../_glmsingle/`; stage 1's (pcnum) is in `glmsingleB_wfdelay/.../_glmsingle/`.
+- **Done (2026-10-30 ~02:00):** all 4 jobs COMPLETED and every log ends with `[DONE]`. Stage 1 took 6 h 13, stage 2
+  7 h 16–7 h 23 (≈ 1.7× faster than Rorqual), with ~188 GB peak per subject. Every subject has one beta per trial
+  for B, C and D, plus `_glmsingle/`. A 40-file sample of D betas per subject is finite and nonzero on every fitted
+  vertex. Outputs are ~6.6 GB per type, so ~20 GB and ~33.5k files per subject (79 GB in total; README's "~9 GB" was low).
+
+  | | trials | vertices fitted | pcnum | median frac | % at floor |
+  |---|---|---|---|---|---|
+  | sub-01 (Rorqual) | 11,184 | 55,274 | 2 | 0.0066 | 48% |
+  | sub-02 | 11,085 | 58,247 | 2 | 0.0115 | 35% |
+  | sub-03 | 11,184 | 58,604 | 2 | 0.0115 | 36% |
+  | sub-05 | 11,008 | 58,699 | 2 | 0.0050 (floor) | 56% |
+  | sub-06 | 11,184 | 58,774 | 2 | 0.0153 | 25% |
 
 ## Phase 4 plan: fit and validate
 - **Dry run:**
