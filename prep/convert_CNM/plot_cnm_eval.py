@@ -85,8 +85,21 @@ def panel_width(groups):
     return 0.55 * len(groups) + 0.4
 
 
-def paired_bars(ax, d, value, groups, top, err=None, chance=None, q=None):
-    """Bars per ROI group for the two reductions (vertex, mean), side by side with a 2px gap."""
+NULL95 = dict(colors=INK, linestyles="solid", linewidth=2.2, zorder=5)
+CHANCE = dict(colors=INK_2, linestyles=(0, (3, 1.5)), linewidth=1.0, zorder=4)
+
+
+def null_handles(chance=True):
+    """Legend entries: permutation-null 95th percentile (the bar to beat) and, for decoding, nominal chance."""
+    h = [Line2D([], [], color=INK, linewidth=2.2, label="Null 95th pct. (to beat)")]
+    if chance:
+        h.append(Line2D([], [], color=INK_2, linestyle=(0, (3, 1.5)), linewidth=1.0, label="Chance"))
+    return h
+
+
+def paired_bars(ax, d, value, groups, top, err=None, chance=None, q=None, null95=None):
+    """Bars per ROI group for the two reductions (vertex, mean), side by side with a 2px gap; optional ticks across
+    each bar at nominal chance and at the 95th percentile of its permutation null (column null95)."""
     x = np.arange(len(groups))
     w = 0.38
     for k, (red, dx) in enumerate((("vertex", -w / 2 - 0.01), ("mean", w / 2 + 0.01))):
@@ -95,8 +108,9 @@ def paired_bars(ax, d, value, groups, top, err=None, chance=None, q=None):
         if err is not None:
             ax.errorbar(x + dx, r[value], yerr=r[err], fmt="none", ecolor=INK_2, elinewidth=0.9, zorder=3)
         if chance is not None:
-            ax.hlines(r["chance"], x + dx - w / 2, x + dx + w / 2, colors=INK, linestyles=(0, (3, 1.5)),
-                      linewidth=1.2, zorder=4)
+            ax.hlines(r["chance"], x + dx - w / 2, x + dx + w / 2, **CHANCE)
+        if null95 is not None and null95 in r:
+            ax.hlines(r[null95], x + dx - w / 2, x + dx + w / 2, **NULL95)
         if q is not None:
             for xi, v, e, qq in zip(x + dx, r[value], r[err] if err else 0 * r[value], r[q]):
                 ax.text(xi, v + e + 0.01, stars(qq), ha="center", va="bottom", fontsize=7, color=INK)
@@ -118,7 +132,7 @@ def fig_noise_ceiling(rel, subs, key, demean, out_dir):
         for j, sub in enumerate(subs):
             ax = axes[i, j]
             d = d0[(d0["phase"] == ph) & (d0["sub"] == sub)]
-            paired_bars(ax, d, "noise_ceiling", groups, top)
+            paired_bars(ax, d, "noise_ceiling", groups, top, null95="noise_ceiling_null95")
             if i == 0:
                 ax.set_title(sub, fontsize=10, fontweight="bold")
             if j == 0:
@@ -132,8 +146,10 @@ def fig_noise_ceiling(rel, subs, key, demean, out_dir):
          f"Split-half noise ceiling · {kd[key]} · {dm[demean]}",
          "Repeats of each condition split in random halves (20 splits); per-vertex (or ROI-mean) correlation of the "
          "half-averages across conditions, Fisher-averaged, Spearman-Brown corrected; ceiling = √r_SB (negative r → 0). "
-         "GLMsingle type D, single trials, dms excluded.",
-         [Patch(color=SERIES[r], label=SERIES_LABEL[r]) for r in ("vertex", "mean")])
+         "Black tick: 95th percentile of the same statistic with condition labels shuffled between halves (within the "
+         "removed cells), the ceiling to beat. GLMsingle type D, single trials, dms excluded.",
+         [Patch(color=SERIES[r], label=SERIES_LABEL[r]) for r in ("vertex", "mean")] +
+         (null_handles(chance=False) if "noise_ceiling_null95" in d0 else []))
 
 
 def fig_noise_ceiling_parcels(rel, subs, key, out_dir):
@@ -195,17 +211,19 @@ def fig_decoding(dec, subs, phase, config, out_dir):
         top = min(1.0, (df["bacc"] + df["bacc_sd"]).max() + 0.1)
         for j, sub in enumerate(subs):
             ax = axes[i, j]
-            paired_bars(ax, df[df["sub"] == sub], "bacc", groups, top, err="bacc_sd", chance=True, q="q")
+            paired_bars(ax, df[df["sub"] == sub], "bacc", groups, top, err="bacc_sd", chance=True, q="q",
+                        null95="null_95")
             if i == 0:
                 ax.set_title(sub, fontsize=10, fontweight="bold")
             if j == 0:
                 ax.set_ylabel(f"{FEATURE_LABELS[f]}\nbalanced acc.")
-    handles = [Patch(color=SERIES[r], label=SERIES_LABEL[r]) for r in ("vertex", "mean")] + \
-              [Line2D([], [], color=INK, linestyle=(0, (3, 1.5)), linewidth=1.2, label="Chance")]
+    handles = [Patch(color=SERIES[r], label=SERIES_LABEL[r]) for r in ("vertex", "mean")] + null_handles()
     save(fig, os.path.join(out_dir, f"decoding_{phase}_{config.replace('+', '')}.png"),
          f"Feature decoding · {phase} · {config}",
          "Single-trial GLMsingle D betas, dms excluded; kernel ridge classifier, 5-fold CV grouped by trial, alpha tuned "
-         "by nested CV. Error bars: SD over folds. * q<.05 ** q<.01 *** q<.001 (1000-perm p, BH-FDR within subject).",
+         "by nested CV. Error bars: SD over folds. Black tick: 95th percentile of the 1000-permutation null (labels "
+         "shuffled, alpha re-tuned each time), the accuracy to beat. * q<.05 ** q<.01 *** q<.001 (permutation p, "
+         "BH-FDR within subject).",
          handles)
 
 
@@ -232,8 +250,8 @@ def fig_leakage(lk, subs, out_dir, feature="loc"):
             for gt, dx in (("glmsingle", -w / 2 - 0.01), ("glmsingleB", w / 2 + 0.01)):
                 r = dt[(dt["sub"] == sub) & (dt["glm"] == f"{gt}_wfdelay")].set_index("roi").reindex(rois)
                 ax.bar(x + dx, r["bacc"], width=w, color=glm_color[gt], zorder=2)
-                ax.hlines(r["chance"], x + dx - w / 2, x + dx + w / 2, colors=INK, linestyles=(0, (3, 1.5)),
-                          linewidth=1.2, zorder=4)
+                ax.hlines(r["chance"], x + dx - w / 2, x + dx + w / 2, **CHANCE)
+                ax.hlines(r["null_95"], x + dx - w / 2, x + dx + w / 2, **NULL95)
                 for xi, v, p in zip(x + dx, r["bacc"], r["p"]):
                     ax.text(xi, v + 0.01, stars(p), ha="center", va="bottom", fontsize=7, color=INK)
             ax.set_xticks(x)
@@ -244,14 +262,14 @@ def fig_leakage(lk, subs, out_dir, feature="loc"):
                 ax.set_title(sub, fontsize=10, fontweight="bold")
             if j == 0:
                 ax.set_ylabel(f"{label}\nbalanced acc.", fontsize=8)
-    handles = [Patch(color=glm_color[g], label=glm_label[g]) for g in glm_color] + \
-              [Line2D([], [], color=INK, linestyle=(0, (3, 1.5)), linewidth=1.2, label="Chance")]
+    handles = [Patch(color=glm_color[g], label=glm_label[g]) for g in glm_color] + null_handles()
     save(fig, os.path.join(out_dir, f"leakage_{feature}.png"),
          f"Temporal leakage · {FEATURE_LABELS[feature]}",
          "Rows 1-2: decoding the neighbouring stimulus's feature from an event's beta, within strata of the current "
          "stimulus (so the current feature cannot drive it); near chance = events well separated, and the forward "
-         "(delay → next) test is the clean one. Row 3: the event's own stimulus, for reference. Single trials, dms "
-         "excluded; * p<.05 ** p<.01 *** p<.001 (uncorrected perm.).",
+         "(delay → next) test is the clean one. Row 3: the event's own stimulus, for reference. Black tick: 95th "
+         "percentile of the 1000-permutation null (averaged over strata). Single trials, dms excluded; * p<.05 "
+         "** p<.01 *** p<.001 (uncorrected perm.).",
          handles)
 
 
@@ -304,8 +322,12 @@ if __name__ == "__main__":
     G = lambda gt, sub: f"{args.glm_runs}/{gt}_{args.variant}/64kDense/{sub}"
 
     rel = pd.concat([read_all({s: [f"{G('glmsingle', s)}/_reliability_pattern/{d}pattern_split_half_reliability_excl-dms"
-                                   f"_split-repeats_key-{k}.tsv" for d in ("", "rois-*/")] for s in args.subs}).assign(key=k)
+                                   f"_split-repeats_key-{k}{p}.tsv" for d in ("", "rois-*/") for p in ("", "_perm*")]
+                               for s in args.subs}).assign(key=k)
                      for k in ("stimulus", "trial")], ignore_index=True)
+    if "r_sb_null95" in rel:  # the same cell with and without a null (plain and _perm<N> files): keep the null's row
+        keys = ["sub", "key", "roi", "level", "phase", "reduce", "demean"]
+        rel = rel.sort_values("r_sb_null95", na_position="first").drop_duplicates(keys, keep="last")
     if not rel.empty:
         for k in ("stimulus", "trial"):
             for dm in ("none", "task_pos"):

@@ -148,6 +148,30 @@ def reliability_pairs(pairs, cells, col_sets, reduce="vertex"):
     }
 
 
+def null_stats(pairs, cells, col_sets, reduce, n_perm, seed):
+    """Permutation null of r_sb: condition rows of one half shuffled (within the demean cells when given), per split,
+    then aggregated exactly like the observed value. Returns the null mean and 95th percentile, and the ceiling to beat."""
+    rng = np.random.default_rng(seed)
+    AB = []
+    for A, B in pairs:
+        A, B = roi_matrix(A, col_sets, reduce), roi_matrix(B, col_sets, reduce)
+        if cells is not None:
+            A, B = demean_cells(A, cells), demean_cells(B, cells)
+        AB.append((A, B))
+    groups = [np.arange(len(AB[0][0]))] if cells is None else [np.flatnonzero(cells == c) for c in np.unique(cells)]
+    null = np.empty(n_perm)
+    for i in range(n_perm):
+        r_sb = []
+        for A, B in AB:
+            order = np.arange(len(B))
+            for g in groups:
+                order[g] = rng.permutation(g)
+            r_sb.append(spearman_brown(fisher_mean(vertex_split_r(A, B[order]))))
+        null[i] = fisher_mean(np.array(r_sb))
+    r95 = float(np.percentile(null, 95))
+    return {"r_sb_null_mean": float(null.mean()), "r_sb_null95": r95, "noise_ceiling_null95": float(np.sqrt(max(r95, 0.0)))}
+
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(description="Per-vertex split-half pattern reliability for decoding ROIs")
     ap.add_argument("--sub", default="sub-01")
@@ -168,6 +192,10 @@ if __name__ == "__main__":
     ap.add_argument("--rois", nargs="+", default=list(ROI_GROUPS), choices=list(ROI_GROUPS))
     ap.add_argument("--levels", nargs="+", default=["group", "parcel"], choices=["group", "parcel"])
     ap.add_argument("--tasks", default=None, help="regex on task dir names (default: pool all)")
+    ap.add_argument("--n_perm", type=int, default=0,
+                    help="permutation null of r_sb (condition labels of one half shuffled; within the demean cells when "
+                         "removing task x position / position means); adds r_sb_null95 and noise_ceiling_null95. "
+                         "Default 0 = no null")
     ap.add_argument("--n_jobs", type=int, default=8)
     ap.add_argument("--dlabel", default="/home/lucas/projects/MULTFSCTRL/prep/fmriprep/Glasser_LR_Dense64k.dlabel.nii")
     ap.add_argument("--out_dir", default=None, help="default: <glm_base_dir>/<sub>/_reliability_pattern")
@@ -209,7 +237,7 @@ if __name__ == "__main__":
     for ph, ses, d in loaded:
         by_phase.setdefault(ph, {})[ses] = d
 
-    rows = []
+    rows, null_jobs = [], []  # null_jobs[i] belongs to rows[i] (only with --n_perm)
     for ph in args.phases if args.split_mode == "repeats" else []:
         by_cond = {}
         for ses in args.sessions:
@@ -232,6 +260,8 @@ if __name__ == "__main__":
                                  "demean": demean, "n_events": int(n_rep.sum()), "n_conditions": len(conds),
                                  "n_vertices": int(sum(len(c) for c in cs)),
                                  **reliability_pairs(pairs, cells, cs, reduce)})
+                    if args.n_perm:
+                        null_jobs.append(delayed(null_stats)(pairs, cells, cs, reduce, args.n_perm, len(null_jobs)))
     for ph in args.phases if args.split_mode == "sessions" else []:
         per_ses = by_phase[ph]
         keys = sorted(set.intersection(*(set(per_ses[s]) for s in args.sessions)))
@@ -248,13 +278,22 @@ if __name__ == "__main__":
                     rows.append({"roi": roi, "group": group, "level": level, "phase": ph, "reduce": reduce,
                                  "demean": demean, "n_events": len(keys), "n_vertices": int(sum(len(c) for c in cs)),
                                  **reliability(S, cells, cs, reduce)})
+                    if args.n_perm:
+                        pairs = [(np.mean([S[i] for i in a], axis=0), np.mean([S[i] for i in b], axis=0)) for a, b in SPLITS]
+                        null_jobs.append(delayed(null_stats)(pairs, cells, cs, reduce, args.n_perm, len(null_jobs)))
 
+    if null_jobs:
+        print(f"[INFO] permutation null: {len(null_jobs)} ROI x reduction x demean cells, n_perm={args.n_perm} ...")
+        for row, null in zip(rows, Parallel(n_jobs=args.n_jobs)(null_jobs)):
+            row.update(null)
     df = pd.DataFrame(rows)
     out_dir = args.out_dir or os.path.join(glm_base_dir, args.sub, "_reliability_pattern")
     os.makedirs(out_dir, exist_ok=True)
     tag = (f"_tasks-{args.tasks}" if args.tasks else "") + (f"_excl-{'-'.join(args.exclude_tasks)}" if args.exclude_tasks else "")
     if args.split_mode == "repeats":
         tag += f"_split-repeats_key-{args.cond_key}" + (f"_min{args.min_repeats}" if args.min_repeats != 2 else "")
+    if args.n_perm:
+        tag += f"_perm{args.n_perm}"
     out_tsv = os.path.join(out_dir, "pattern_split_half_reliability" + tag + ".tsv")
     df.to_csv(out_tsv, sep="\t", index=False)
 
