@@ -420,6 +420,25 @@ scipy 1.16.2, ...), GLMsingle from the package's 1ab54a6 source. Dry runs are id
   | sub-05 | 11,008 | 58,699 | 2 | 0.0050 (floor) | 56% |
   | sub-06 | 11,184 | 58,774 | 2 | 0.0153 | 25% |
 
+**Trillium evaluation (2026-10-30), sub-02/03/05/06, type D** (single trials, dms excluded, as sub-01).
+`slurm_trillium_evaluate.sh` (slurm_evaluate.sh steps + `diag/loc_by_run.py`; 6 h per subject),
+`slurm_trillium_rois.sh <sub> 1000 IFC` (IFC = VLPFC: 44, 45, IFJa/p, IFSa/p, 47l, p47r; 1 h 40),
+`slurm_trillium_relnull.sh` (reliability with `--n_perm 1000`, new). Dataset root for the scripts: `out/cnm_root` (symlinks).
+Figures: `plot_cnm_eval.py` → `out/eval_figures/`. **Rule adopted (user, 2026-10-30): the bar to beat is the 95th
+percentile of each statistic's permutation null** (decoding/leakage: the sweeps' `null_95`; reliability:
+`noise_ceiling_null95`), drawn as a black tick; chance only for reference.
+- Positive control, EVC loc (encoding, vertex, demean+tuned): 0.88 / 0.93 / 0.82 / 0.82 (sub-01 0.90). Steady over
+  sessions; 7 runs < 0.7, none at chance (sub-02: 3 interdms loc_ABAB runs 0.56–0.69).
+- Encoding decoding (vertex): EVC loc 0.82–0.93; VTC ctg 0.84–0.89; obj (chance .25) EVC/VTC 0.42–0.51, IT 0.32–0.39;
+  IFC ctg 0.56–0.65, obj 0.27–0.32 (all above null); DLPFC ctg 0.50–0.61 (sub-05 at null). ROI-mean decoding ≈ null
+  except VTC ctg (0.52–0.56).
+- Noise ceiling (stimulus key, per vertex, nothing removed): EVC 0.66–0.83, VTC 0.69–0.82, DLPFC 0.43–0.63, IT 0.39–0.53
+  (null 95th ≈ 0.09–0.14). With task × position removed: EVC/VTC 0.41–0.66 pass; IFC per vertex 0.17–0.22 passes in
+  sub-02/03 only; ROI-mean ceilings (null ≈ 0.25) mostly fail.
+- Leakage (EVC loc, delay → next stimulus): sub-02/06 B ≈ 0.50, D 0.60–0.67 (as sub-01); **sub-03/05 leak under B
+  too (0.73–0.74; D 0.84/0.76)**: likely slower HRFs (not checked yet). Read their delay-phase results with care.
+- sub-05 is the weakest subject throughout (ridge at the floor for 56% of vertices).
+
 ## Phase 4 plan: fit and validate
 - **Dry run:**
   ```
