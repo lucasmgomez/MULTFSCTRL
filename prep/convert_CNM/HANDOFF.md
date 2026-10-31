@@ -449,9 +449,23 @@ percentile of each statistic's permutation null** (decoding/leakage: the sweeps'
 - Noise ceiling (stimulus key, per vertex, nothing removed): EVC 0.66–0.83, VTC 0.69–0.82, DLPFC 0.43–0.63, IT 0.39–0.53
   (null 95th ≈ 0.09–0.14). With task × position removed: EVC/VTC 0.41–0.66 pass; IFC per vertex 0.17–0.22 passes in
   sub-02/03 only; ROI-mean ceilings (null ≈ 0.25) mostly fail.
-- Leakage (EVC loc, delay → next stimulus): sub-02/06 B ≈ 0.50, D 0.60–0.67 (as sub-01); **sub-03/05 leak under B
-  too (0.73–0.74; D 0.84/0.76)**: likely slower HRFs (not checked yet). Read their delay-phase results with care.
+- Leakage (EVC loc, delay → next stimulus): sub-02/06 B ≈ 0.50, D 0.60–0.67; **sub-03/05 leak under B
+  too (0.73–0.74; D 0.84/0.76)**, as does sub-01 (B 0.69, D 0.79): likely slower HRFs (not checked yet). Read their delay-phase results with care.
 - sub-05 is the weakest subject throughout (ridge at the floor for 56% of vertices).
+
+**sub-01 re-evaluated on Trillium (2026-10-31)**, same three launchers (jobs 2722644/5/6: 6 h 00, 1 h 41, 12 min;
+0 failed steps); file set identical to sub-02's. Its Rorqual evaluation was moved, not deleted, to
+`_rorqual_eval_2026-10-25/` in its glmsingle and glmsingleB folders. Five-subject figures: `out/eval_figures_5subs/`
+(`out/eval_figures/` keeps the four-subject set). sub-01 alongside the others:
+- Positive control EVC loc 0.90 (vertex, encoding, demean+tuned); overall loc_by_run 0.90, 3 of 96 runs < 0.7 (lowest 0.56).
+- Decoding (encoding, vertex, position removed): VTC loc 0.86 (highest of the five), VTC ctg 0.87, IFC ctg 0.63 /
+  obj 0.31, DLPFC ctg 0.54 / obj 0.28; all above null. With sub-01, ROI-mean decoding beats its null in 22/75
+  encoding cells, 19 of them by < 0.03; VTC ctg and obj still pass in every subject.
+- Noise ceiling (stimulus key, per vertex, nothing removed): EVC 0.71, VTC 0.77, DLPFC 0.47, IFC 0.50, **IT 0.26, the
+  lowest of the five** (others 0.39–0.53); with task × position removed IT drops to 0 (null 0.08) while EVC/VTC
+  (0.61/0.65) and IFC (0.13 vs 0.10) still pass.
+- Leakage: delay → next under B 0.69 (EVC loc), so 3 of 5 subjects (01/03/05) leak; the HRF check should cover all three.
+- Ridge: 48% of vertices at the floor fraction, second only to sub-05.
 
 ## Phase 4 plan: fit and validate
 - **Dry run:**
