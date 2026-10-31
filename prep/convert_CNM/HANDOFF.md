@@ -430,8 +430,13 @@ percentile of each statistic's permutation null** (decoding/leakage: the sweeps'
 - Positive control, EVC loc (encoding, vertex, demean+tuned): 0.88 / 0.93 / 0.82 / 0.82 (sub-01 0.90). Steady over
   sessions; 7 runs < 0.7, none at chance (sub-02: 3 interdms loc_ABAB runs 0.56–0.69).
 - Encoding decoding (vertex): EVC loc 0.82–0.93; VTC ctg 0.84–0.89; obj (chance .25) EVC/VTC 0.42–0.51, IT 0.32–0.39;
-  IFC ctg 0.56–0.65, obj 0.27–0.32 (all above null); DLPFC ctg 0.50–0.61 (sub-05 at null). ROI-mean decoding ≈ null
-  except VTC ctg (0.52–0.56).
+  IFC ctg 0.56–0.65, obj 0.27–0.32 (all above null); DLPFC ctg 0.50–0.61 (sub-05 at null). ROI-mean decoding beats
+  its null in 16/60 encoding cells (demean+tuned), 13 of them by < 0.03; only VTC ctg (0.52–0.56) and VTC obj
+  (0.26–0.28) beat it in every subject.
+- Noise-ceiling conditions (confirmed by Lucas, 2026-10-31): the stimulus key, task family × position × stimulus
+  (loc, obj), per phase, pooled over task variants (acq), trials, runs and sessions. Encoding 102 conditions
+  (8 stimuli × 13 positions, 2 never shown), median 75–80 repeats; Delay 80 (no delay event after position 1),
+  median 46–48. The trial key (task, acq, phase, pos, tc; ~2 repeats) is a secondary check only.
 - Noise ceiling (stimulus key, per vertex, nothing removed): EVC 0.66–0.83, VTC 0.69–0.82, DLPFC 0.43–0.63, IT 0.39–0.53
   (null 95th ≈ 0.09–0.14). With task × position removed: EVC/VTC 0.41–0.66 pass; IFC per vertex 0.17–0.22 passes in
   sub-02/03 only; ROI-mean ceilings (null ≈ 0.25) mostly fail.
