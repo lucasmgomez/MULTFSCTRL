@@ -420,6 +420,15 @@ scipy 1.16.2, ...), GLMsingle from the package's 1ab54a6 source. Dry runs are id
   | sub-05 | 11,008 | 58,699 | 2 | 0.0050 (floor) | 56% |
   | sub-06 | 11,184 | 58,774 | 2 | 0.0153 | 25% |
 
+**sub-01 on Trillium (2026-10-31):** Lucas copied sub-01 from Rorqual as `data/cnm_sub-01.tar` (kept). Extracted and
+checked against its `FILES.tsv` (35,051 files, sizes match), then moved into the package layout: `data/behav/sub-01`,
+`data/neural/.../{64kDense,confounds,bids,derivatives}/sub-01`, `data/sourcedata/scans/sub-01`,
+`out/glm_runs/{glmsingle,glmsingleB,glmsingleC}_wfdelay/64kDense/sub-01` (single-stage Rorqual fit, B/C/D).
+Its mapping rows are in `data/mapping_sub-01.csv` (`data/mapping.csv` untouched). The tar's code snapshot (c8014f5,
+an ancestor of this branch) and `FILES.tsv` are in `data/cnm_sub-01_extras/`. sub-01's `_decoding_roi/` and
+`_reliability_pattern/` hold its Rorqual evaluation under the same names the Trillium launchers write: move them to a
+new folder before re-running the evaluation on sub-01.
+
 **Trillium evaluation (2026-10-30), sub-02/03/05/06, type D** (single trials, dms excluded, as sub-01).
 `slurm_trillium_evaluate.sh` (slurm_evaluate.sh steps + `diag/loc_by_run.py`; 6 h per subject),
 `slurm_trillium_rois.sh <sub> 1000 IFC` (IFC = VLPFC: 44, 45, IFJa/p, IFSa/p, 47l, p47r; 1 h 40),
