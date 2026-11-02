@@ -484,6 +484,21 @@ GLMsingle working files, regenerable), `out/smoke/`, `out/eval_test/`. Lucas rem
 `data/cnm_sub-01_extras/` and the root `dryrun_*.log`. Launchers, `run_fit.sh`, `extract.py` and the READMEs use
 the new paths; `extract.py` reproduces the dashboard data exactly from them.
 
+**Frontal searchlight maps (2026-11-02, Lucas's request).** Package root is now `/scratch/lucasg/wm_fmri/fmri_lucas`
+(renamed from `cnm_glmsingle`; `slurm_trillium_{rois,relnull}.sh` still hardcode the old path, and `evaluate`/`pair`
+default to it: set or fix `PKG` before re-running them). New `analysis/glm/misc/searchlight_decoding.py`: loc/ctg/obj
+decoded at each of the 6,391 DLPFC + IFC vertices from the mask vertices within 8 mm along the fsLR 32k template
+midthickness (median 73), same decoder as the demean+tuned sweeps (primal ridge; matches `ridge_decode_5fold` to 6
+decimals, checked in every job), 1000 shuffles per vertex (the same shuffles everywhere). Template surfaces from
+templateflow in `data/templates/fsLR_32k/`. Launcher `slurm_trillium_searchlight.sh <sub>` (run from the package root;
+41 min per subject, jobs 2740551-5). Output `<runs>/glmsingle_wfdelay/64kDense/<sub>/_searchlight/`. Dashboard maps
+built by `out/dashboards/cnm-quality/brain_data.py`.
+- Most vertices sit at chance (median 0.50-0.52); the signal is in patches. Encoding, share above the null after
+  BH-FDR (per subject x feature x phase map): category IFC 20-48% vs DLPFC 3-26%; object 7-44% vs 1-13%; location
+  0-61% vs 0-92% (sub-02 high, sub-05 none). Category/object peaks: IFSa, IFSp, IFJa (IFC), p9-46v, 8C (DLPFC).
+- Note: the decoding folds are grouped by trial (task, acq, run, tc), not by trial sequence across runs; only
+  `loc_by_run.py` groups by sequence (task, acq, tc).
+
 ## Phase 4 plan: fit and validate
 - **Dry run:**
   ```
