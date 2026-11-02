@@ -467,6 +467,23 @@ percentile of each statistic's permutation null** (decoding/leakage: the sweeps'
 - Leakage: delay → next under B 0.69 (EVC loc), so 3 of 5 subjects (01/03/05) leak; the HRF check should cover all three.
 - Ridge: 48% of vertices at the floor fraction, second only to sub-05.
 
+**Package cleanup on Trillium (2026-11-02, Lucas's request, before copying it to other servers).** Paths above
+are as they were at the time; the map to the new layout:
+
+| was | now |
+|---|---|
+| `out/glm_runs/` | `out/glm/runs/` |
+| `out/cnm_root/` (absolute symlinks) | `out/glm/cnm_root/` (relative symlinks, survive a copy) |
+| `out/eval_figures_5subs/`, `out/eval_figures/` | `out/figures/eval_5subs/`, `out/figures/eval_4subs/` |
+| `out/eval_page/` | `out/dashboards/cnm-quality/` (backups in `versions/`) |
+
+Deleted: `data/mapping.csv`, `data/mapping_sub-01.csv` (the repo's `prep/convert_CNM/mapping.csv` has all five
+subjects and now also marks the dropped sub-02 run `include=0`); `data/sourcedata/` (sub-01 `scans.tsv` only; the
+acquisition dates and times are in the behav log names and the BIDS sidecars); `out/glmsingle_raw/` (83 GB of
+GLMsingle working files, regenerable), `out/smoke/`, `out/eval_test/`. Lucas removed `data/cnm_sub-01.tar`,
+`data/cnm_sub-01_extras/` and the root `dryrun_*.log`. Launchers, `run_fit.sh`, `extract.py` and the READMEs use
+the new paths; `extract.py` reproduces the dashboard data exactly from them.
+
 ## Phase 4 plan: fit and validate
 - **Dry run:**
   ```

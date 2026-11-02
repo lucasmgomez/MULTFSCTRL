@@ -24,12 +24,12 @@ for SUB in "$@"; do
   if [ "$STAGE" = 1 ]; then
     ARGS=(--save_types B C)
   else
-    SUMMARY=$PKG/out/glm_runs/glmsingleB_wfdelay/64kDense/$SUB/_glmsingle/glmsingle_fit_summary.json
+    SUMMARY=$PKG/out/glm/runs/glmsingleB_wfdelay/64kDense/$SUB/_glmsingle/glmsingle_fit_summary.json
     PCNUM=$("$PYTHON" -c "import json,sys; print(json.load(open(sys.argv[1]))['pcnum'])" "$SUMMARY")
     ARGS=(--save_types D --pcstop "-$PCNUM")
   fi
   echo "$SUB stage $STAGE: ${ARGS[*]}"
-  RAW=$PKG/out/glmsingle_raw/${SUB}_stage$STAGE bash "$PKG/run_fit.sh" "$SUB" 96 "${ARGS[@]}" \
+  RAW=$PKG/out/glm/raw/${SUB}_stage$STAGE bash "$PKG/run_fit.sh" "$SUB" 96 "${ARGS[@]}" \
     > "$PKG/out/logs/${SUB}_stage${STAGE}_${SLURM_JOB_ID}.log" 2>&1 &
   pids+=($!)
 done

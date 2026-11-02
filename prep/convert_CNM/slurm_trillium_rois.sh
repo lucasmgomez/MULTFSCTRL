@@ -13,7 +13,7 @@
 set -uo pipefail
 SUB=$1; NPERM=$2; shift 2; ROIS="$*"
 PKG=/scratch/lucasg/wm_fmri/cnm_glmsingle
-REPO=$PKG/code/MULTFSCTRL; CNM=$PKG/out/cnm_root; PY=~/envs/fmri_glm/bin/python
+REPO=$PKG/code/MULTFSCTRL; CNM=$PKG/out/glm/cnm_root; PY=~/envs/fmri_glm/bin/python
 N=${SLURM_CPUS_PER_TASK:-8}
 export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 FLEXIBLAS_NUM_THREADS=1 PYTHONNOUSERSITE=1
 SES=$(ls -d $CNM/behav/$SUB/ses-* | xargs -n1 basename | tr '\n' ' ')

@@ -37,10 +37,10 @@ under numpy 2 and lacks fixes the fit relies on) and numpy 2.x.
    sub-01 took 24 h 53 min at 64 CPUs with ~15 busy on average; peak RAM 188 GB. Start with ≥ 200 GB.
 
 ## Outputs
-`out/glm_runs/{glmsingleB,glmsingleC,glmsingle}_wfdelay/64kDense/<sub>/`: one dscalar per event per model type
+`out/glm/runs/{glmsingleB,glmsingleC,glmsingle}_wfdelay/64kDense/<sub>/`: one dscalar per event per model type
 (~33.5k files, ~9 GB per subject), plus `_glmsingle/` (manifest, summary maps, fit summary, figures).
-`out/glmsingle_raw/<sub>/` holds GLMsingle's own files (~11 GB; regenerable, no need to copy back).
+`out/glm/raw/<sub>/` holds GLMsingle's own files (~11 GB; regenerable, no need to copy back).
 
-To bring results back, copy `out/glm_runs/*_wfdelay/64kDense/<sub>` into
+To bring results back, copy `out/glm/runs/*_wfdelay/64kDense/<sub>` into
 `CNM/neural/fmriprep_outs/fmriprep_20.2.6/glm_runs/*_wfdelay/64kDense/` on Rorqual; the evaluation there
 (`prep/convert_CNM/slurm_evaluate.sh`) reads that layout.
