@@ -10,11 +10,14 @@ decodes from its neighbourhood: mask vertices within --radius mm along the edges
 in primal form (eigendecomposition of X'X); this equals ridge_decode_5fold's kernel form (checked by --check).
 
 Permutation null: --n_perm label shuffles, the same at every vertex, each re-running the alpha choice; per vertex the
-null 95th percentile and p = (1 + #null >= real) / (n_perm + 1).
+null 95th percentile and p = (1 + #null >= real) / (n_perm + 1). Map-wide correction (max statistic): because the
+shuffles are shared, each one gives a whole null map; its maximum over all centres forms the null of the map maximum.
+max_95 is its 95th percentile (one value per feature x phase; a vertex above it survives at FWER .05) and p_fwer =
+(1 + #max >= real) / (n_perm + 1). The null maxima are also saved (*_maxnull.tsv).
 
   python searchlight_decoding.py --sub sub-01 --sessions ses-01 ... --root <cnm_root> --prep_run fmriprep_20.2.6 \
       --surf_dir <fsLR_32k dir> --dlabel <Glasser_LR_Dense64k.dlabel.nii> --n_perm 1000 --n_jobs 192
-Writes <glm_base_dir>/<sub>/_searchlight/searchlight_<groups>_r<radius>_..._perm<n>.tsv (one row per vertex x feature x
+Writes <glm_base_dir>/<sub>/_searchlight/searchlight_<groups>_r<radius>_..._perm<n>_maxstat.tsv (one row per vertex x feature x
 phase).
 """
 import os
@@ -174,7 +177,7 @@ def main():
     print(f"[INFO] loading {len(args.features) * len(args.phases)} feature x phase datasets ...", flush=True)
     loaded = Parallel(n_jobs=min(args.n_jobs, len(args.features) * len(args.phases)))(
         delayed(load_one)(f, p, cfg, names) for f in args.features for p in args.phases)
-    rows = []
+    rows, maxrows = [], []
     for feature, phase, X, y, meta in loaded:
         assert X.shape[1] == len(dense), (X.shape, len(dense))
         n_bad = int((~np.isfinite(X)).any(axis=0).sum())
@@ -188,13 +191,18 @@ def main():
             delayed(run_chunk)([nbr[c] for c in cs], folds, n_classes, K) for cs in chunks)
         B = np.vstack([b for r in res for b in r])
         real, null = B[:, 0], B[:, 1:]
+        mx = null.max(axis=0) if args.n_perm else np.full(1, np.nan)
+        max95 = float(np.percentile(mx, 95))
+        maxrows += [{"feature": feature, "phase": phase, "perm": k, "max_bacc": float(m)} for k, m in enumerate(mx)]
         for i, c in enumerate(centres):
             d = dense[c]
             rows.append({"feature": feature, "phase": phase, "dense": int(d), "hemi": "L" if d < N_HEMI else "R",
                          "vertex": int(d % N_HEMI), "parcel": parcel[c][2:-4], "roi": group_of[parcel[c]],
                          "n_vertices": int(sizes[c]), "bacc": float(real[i]), "chance": 1 / n_classes,
                          "null_95": float(np.percentile(null[i], 95)) if args.n_perm else np.nan,
-                         "p": float((1 + (null[i] >= real[i]).sum()) / (args.n_perm + 1)) if args.n_perm else np.nan})
+                         "p": float((1 + (null[i] >= real[i]).sum()) / (args.n_perm + 1)) if args.n_perm else np.nan,
+                         "max_95": max95,
+                         "p_fwer": float((1 + (mx >= real[i]).sum()) / (args.n_perm + 1)) if args.n_perm else np.nan})
         for c in centres[: args.check]:
             ref = ridge_decode_5fold(X[:, nbr[c]], y, groups=groups, alphas=ALPHA_GRID, nuisance=cells)["mean_bacc"]
             print(f"[CHECK] centre {c}: searchlight {real[list(centres).index(c)]:.6f} vs ridge_decode_5fold {ref:.6f}")
@@ -204,13 +212,17 @@ def main():
     tag = f"{'-'.join(args.rois)}_r{args.radius:g}_{args.glm_type}_{args.glm_variant}_{'-'.join(args.features)}"
     if args.exclude_tasks:
         tag += f"_excl-{'-'.join(args.exclude_tasks)}"
-    tag += "_rep-single_cfg-demeantuned" + (f"_perm{args.n_perm}" if args.n_perm else "")
+    tag += "_rep-single_cfg-demeantuned" + (f"_perm{args.n_perm}_maxstat" if args.n_perm else "")
     if args.max_centres:
         tag += f"_first{args.max_centres}"
     out = os.path.join(out_dir, f"searchlight_{tag}.tsv")
     df = pd.DataFrame(rows)
     df.to_csv(out, sep="\t", index=False)
     print(f"[SAVED] {out}")
+    if args.n_perm:
+        pd.DataFrame(maxrows).to_csv(out.replace(".tsv", "_maxnull.tsv"), sep="\t", index=False)
+    print(df.groupby(["feature", "phase"])[["max_95"]].first().round(3).to_string())
+    print(df.assign(fwer=df["p_fwer"] < 0.05).groupby(["feature", "phase", "roi"])["fwer"].mean().round(3).to_string())
     print(df.groupby(["feature", "phase", "roi"])[["bacc", "null_95"]].agg(["median", "max"]).round(3).to_string())
 
 

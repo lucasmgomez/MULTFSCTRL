@@ -496,6 +496,12 @@ built by `out/dashboards/cnm-quality/brain_data.py`.
 - Most vertices sit at chance (median 0.50-0.52); the signal is in patches. Encoding, share above the null after
   BH-FDR (per subject x feature x phase map): category IFC 20-48% vs DLPFC 3-26%; object 7-44% vs 1-13%; location
   0-61% vs 0-92% (sub-02 high, sub-05 none). Category/object peaks: IFSa, IFSp, IFJa (IFC), p9-46v, 8C (DLPFC).
+- **Map-wide correction (Lucas, 2026-11-02): max statistic, replacing FDR.** With 1000 shuffles p >= 1/1001, so BH
+  over 6,391 vertices needs >= 128 vertices at that floor before any can pass; sparse maps (mostly sub-05) were limited
+  by the shuffle count. Rerun (jobs 2741118-23, same results otherwise) writes `*_perm1000_maxstat.tsv` (adds `max_95`,
+  `p_fwer`) and `*_maxnull.tsv` (null maxima). Threshold ~0.53 for loc/ctg, 0.27-0.28 for obj. Encoding, share above
+  it, IFC vs DLPFC: category 12-41% vs 1-12%, object 4-28% vs 0-7%, location 0-9% vs 0-37%; sub-05 location none.
+  10,000 shuffles (for FDR) not run.
 - Note: the decoding folds are grouped by trial (task, acq, run, tc), not by trial sequence across runs; only
   `loc_by_run.py` groups by sequence (task, acq, tc).
 
